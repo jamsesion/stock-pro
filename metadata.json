@@ -1,0 +1,8 @@
+{
+  "name": "Gestión de Inventario y Stock",
+  "description": "Sistema de gestión de inventario, catálogo de productos, plantillas de instalación, registro de movimientos y panel de ganancias.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
