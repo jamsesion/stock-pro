@@ -58,6 +58,7 @@ export interface StockMovement {
   fechaHora: string; // ISO 8601 string
   motivo: string; // e.g. "Instalación cliente Pérez"
   cliente?: string;
+  numeroFactura?: string; // Número correlativo de factura/albarán persistido en la BD
   plantillaId?: string;
   plantillaNombre?: string;
   items: StockMovementItem[];

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Wrench, AlertCircle, CheckCircle2, TrendingUp, Info } from 'lucide-react';
+import { X, Wrench, AlertCircle, CheckCircle2, TrendingUp, Info, Hash } from 'lucide-react';
 import { InstallationTemplate, Product } from '../types';
+import { dbService } from '../services/db';
 import { formatCurrency } from '../utils/formatters';
 
 interface ExecuteInstallationModalProps {
@@ -14,6 +15,7 @@ interface ExecuteInstallationModalProps {
     plantillaNombre?: string;
     motivo: string;
     cliente?: string;
+    numeroFactura?: string;
     items: { productoId: string; cantidad: number }[];
     observaciones?: string;
   }) => void;
@@ -30,9 +32,16 @@ export const ExecuteInstallationModal: React.FC<ExecuteInstallationModalProps> =
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [motivo, setMotivo] = useState('Instalación cliente Pérez');
   const [cliente, setCliente] = useState('Cliente Pérez');
+  const [numeroFactura, setNumeroFactura] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [items, setItems] = useState<{ productoId: string; cantidad: number }[]>([]);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setNumeroFactura(dbService.getNextInvoiceNumber());
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (initialTemplateId && templates.some((t) => t.id === initialTemplateId)) {
@@ -121,6 +130,7 @@ export const ExecuteInstallationModal: React.FC<ExecuteInstallationModalProps> =
       plantillaNombre: currentTemplate?.nombre,
       motivo: motivo.trim(),
       cliente: cliente.trim() || undefined,
+      numeroFactura: numeroFactura.trim() || undefined,
       items: items.filter((i) => i.cantidad > 0),
       observaciones: observaciones.trim() || undefined,
     });
@@ -180,8 +190,8 @@ export const ExecuteInstallationModal: React.FC<ExecuteInstallationModalProps> =
           </div>
 
           {/* Motivo del Movimiento (Required per spec) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Motivo del Movimiento *
               </label>
@@ -200,6 +210,28 @@ export const ExecuteInstallationModal: React.FC<ExecuteInstallationModalProps> =
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                <span>Nº Factura</span>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                  Secuencia BD
+                </span>
+              </label>
+              <input
+                id="input-installation-factura"
+                type="text"
+                value={numeroFactura}
+                onChange={(e) => setNumeroFactura(e.target.value)}
+                placeholder="FAC-00001"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-mono font-bold text-emerald-900 bg-emerald-50/40 focus:ring-2 focus:ring-emerald-500"
+              />
+              <span className="text-[11px] text-slate-400 mt-0.5 block">
+                Consecutivo guardado en BD
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Cliente / Dirección
               </label>
@@ -214,6 +246,19 @@ export const ExecuteInstallationModal: React.FC<ExecuteInstallationModalProps> =
                   }
                 }}
                 placeholder="Ej: Pérez / Finca El Roble"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Observaciones / Notas
+              </label>
+              <input
+                id="input-installation-observaciones"
+                type="text"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Ej: Garantía 2 años, inversor probado"
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm"
               />
             </div>

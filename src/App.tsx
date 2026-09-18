@@ -162,10 +162,7 @@ export default function App() {
     if (dbService.hasUnsavedChanges()) {
       setIsUnsavedPromptOpen(true);
     } else {
-      if (window.confirm('¿Deseas cerrar y desconectar la base de datos actual?')) {
-        dbService.disconnectDatabase();
-        showToast('Base de datos desconectada', 'info');
-      }
+      showToast('Todos los cambios están guardados de forma segura.', 'success');
     }
   };
 
@@ -201,12 +198,14 @@ export default function App() {
     plantillaNombre?: string;
     motivo: string;
     cliente?: string;
+    numeroFactura?: string;
     items: { productoId: string; cantidad: number }[];
     observaciones?: string;
   }) => {
     const result = dbService.executeInstallation(params);
     if (result.success && result.movement) {
-      showToast(`¡Instalación registrada! Stock descontado automáticamente (+${result.movement.gananciaTotal.toFixed(2)} €)`, 'success');
+      const facturaTag = result.movement.numeroFactura ? ` [${result.movement.numeroFactura}]` : '';
+      showToast(`¡Instalación registrada${facturaTag}! Stock descontado (+${result.movement.gananciaTotal.toFixed(2)} €)`, 'success');
     } else {
       showToast(result.error || 'Error al ejecutar la instalación', 'warning');
     }
@@ -337,32 +336,6 @@ export default function App() {
           />
         )}
 
-        {/* Unsaved changes top notification strip */}
-        {isDbLoaded && hasUnsavedChanges && (
-          <div className="mb-4 bg-amber-500/15 border border-amber-500/40 rounded-2xl px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-950 shadow-xs">
-            <div className="flex items-center gap-2.5">
-              <span className="p-1.5 rounded-lg bg-amber-500 text-slate-950 shrink-0">
-                <AlertTriangle className="w-4 h-4" />
-              </span>
-              <div className="text-xs sm:text-sm">
-                <span className="font-bold text-slate-900">Modificaciones sin guardar: </span>
-                <span className="text-slate-700">
-                  Has realizado cambios en <strong className="font-mono">{dbFileName}</strong>. Recuerda guardar antes de cerrar la aplicación.
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              id="btn-alert-save-database"
-              onClick={handleSaveCurrentDatabase}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-md transition active:scale-95 cursor-pointer shrink-0"
-            >
-              <Save className="w-4 h-4" />
-              <span>Guardar base de datos</span>
-            </button>
-          </div>
-        )}
-
         {/* Stock Alerts Banner (displayed only when not on alerts tab and when DB is loaded) */}
         {isDbLoaded && activeTab !== 'alerts' && (
           <StockAlertsBanner
@@ -443,13 +416,11 @@ export default function App() {
         onSaveAndConfirm={async () => {
           await handleSaveCurrentDatabase();
           setIsUnsavedPromptOpen(false);
-          dbService.disconnectDatabase();
-          showToast('Cambios guardados con éxito. Base de datos cerrada.', 'success');
+          showToast('Cambios guardados con éxito en la aplicación.', 'success');
         }}
         onDiscardAndConfirm={() => {
           setIsUnsavedPromptOpen(false);
-          dbService.disconnectDatabase();
-          showToast('Sesión cerrada sin guardar la última modificación.', 'warning');
+          showToast('Ventana cerrada.', 'info');
         }}
       />
 

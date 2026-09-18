@@ -1,19 +1,21 @@
 import { InstallationTemplate, Product, StockMovement, StockMovementItem } from '../types';
 import {
-  downloadDatabaseBlob,
   verifyPermission,
-  createDatabaseFileHandle,
 } from '../utils/fileDatabase';
 import {
   saveActiveDatabaseToIndexedDb,
   loadActiveDatabaseFromIndexedDb,
   clearActiveDatabaseInIndexedDb,
+  getStoredDbPath,
+  setStoredDbPath,
 } from '../utils/indexedDbStorage';
 
 export interface DatabaseSchema {
   version: number;
   app: string;
   updatedAt: string;
+  dbPath?: string;
+  invoiceConsecutive?: number;
   products: Product[];
   templates: InstallationTemplate[];
   movements: StockMovement[];
@@ -216,6 +218,7 @@ export const SAMPLE_MOVEMENTS: StockMovement[] = [
     fechaHora: '2026-09-10T14:45:22.000Z',
     motivo: 'Instalación cliente Pérez',
     cliente: 'Juan Carlos Pérez - Finca El Roble',
+    numeroFactura: 'FAC-00001',
     plantillaId: 'tpl-1',
     plantillaNombre: 'Instalación inversor 10kW',
     items: [
@@ -307,12 +310,16 @@ class InventoryDatabase {
     version: 1,
     app: 'Gestión de Inventario y Stock',
     updatedAt: new Date().toISOString(),
+    dbPath: 'inventario.json',
+    invoiceConsecutive: 1,
     products: [],
     templates: [],
     movements: [],
   };
 
   private isDatabaseLoaded: boolean = false;
+  // Variable de estado global y persistente para la ruta del archivo de base de datos
+  private dbPath: string = getStoredDbPath() || 'inventario.json';
   private databaseFileName: string | null = null;
   private fileHandle: any | null = null;
   private lastSavedAt: Date | null = null;
@@ -339,13 +346,53 @@ class InventoryDatabase {
     });
   }
 
-  // --- Portable File State Getters ---
+  // --- Portable File State Getters & Setters ---
   public isLoaded(): boolean {
     return this.isDatabaseLoaded;
   }
 
+  public getDbPath(): string {
+    return this.dbPath || getStoredDbPath() || this.databaseFileName || 'inventario.json';
+  }
+
+  public setDbPath(path: string): void {
+    const clean = path.trim();
+    if (!clean) return;
+    this.dbPath = clean;
+    this.databaseFileName = clean;
+    this.cache.dbPath = clean;
+    setStoredDbPath(clean);
+    this.notifyListeners();
+  }
+
   public getDatabaseFileName(): string | null {
-    return this.databaseFileName;
+    return this.dbPath || this.databaseFileName;
+  }
+
+  public getInvoiceConsecutive(): number {
+    return typeof this.cache.invoiceConsecutive === 'number' && this.cache.invoiceConsecutive > 0
+      ? this.cache.invoiceConsecutive
+      : 1;
+  }
+
+  public setInvoiceConsecutive(num: number): void {
+    const valid = Math.max(1, Math.floor(num));
+    this.cache.invoiceConsecutive = valid;
+    this.persist({ ...this.cache });
+    this.notifyListeners();
+  }
+
+  public getNextInvoiceNumber(): string {
+    const num = this.getInvoiceConsecutive();
+    return `FAC-${String(num).padStart(5, '0')}`;
+  }
+
+  public consumeNextInvoiceNumber(): string {
+    const currentNum = this.getInvoiceConsecutive();
+    const formatted = `FAC-${String(currentNum).padStart(5, '0')}`;
+    this.cache.invoiceConsecutive = currentNum + 1;
+    this.persist({ ...this.cache });
+    return formatted;
   }
 
   public getLastSavedAt(): Date | null {
@@ -378,41 +425,89 @@ class InventoryDatabase {
   }
 
   /**
-   * Sincroniza el estado actual con IndexedDB para mantener persistencia interna inmediata
+   * Sincroniza el estado actual con el almacenamiento local seguro (IndexedDB + localStorage)
+   * utilizando la ruta exacta almacenada en dbPath
    */
   private async syncToIndexedDb(): Promise<void> {
-    if (this.isDatabaseLoaded && this.databaseFileName) {
-      await saveActiveDatabaseToIndexedDb(this.databaseFileName, this.cache);
+    const currentPath = this.getDbPath();
+    this.dbPath = currentPath;
+    this.databaseFileName = currentPath;
+    this.cache.dbPath = currentPath;
+    if (!this.cache.invoiceConsecutive) {
+      this.cache.invoiceConsecutive = 1;
     }
+    this.isDatabaseLoaded = true;
+    await saveActiveDatabaseToIndexedDb(currentPath, this.cache, this.fileHandle);
   }
 
   /**
-   * Inicializa la base de datos desde el almacenamiento interno de la app si existe
+   * Inicializa la base de datos desde el almacenamiento interno de la app si existe,
+   * leyendo exactamente la misma dbPath y el número consecutivo de factura.
    */
   public async initFromStorage(): Promise<boolean> {
-    if (this.isDatabaseLoaded) return true;
     try {
+      const storedPath = getStoredDbPath() || 'inventario.json';
+      this.dbPath = storedPath;
+      this.databaseFileName = storedPath;
+
       const stored = await loadActiveDatabaseFromIndexedDb();
       if (stored && stored.data && Array.isArray(stored.data.products)) {
         this.cache = stored.data;
+        if (typeof this.cache.invoiceConsecutive !== 'number' || this.cache.invoiceConsecutive < 1) {
+          const maxInv = Array.isArray(this.cache.movements)
+            ? this.cache.movements.reduce((max, m) => {
+                if (m.numeroFactura) {
+                  const match = m.numeroFactura.match(/\d+/);
+                  if (match) {
+                    const val = parseInt(match[0], 10);
+                    return val > max ? val : max;
+                  }
+                }
+                return max;
+              }, 0)
+            : 0;
+          this.cache.invoiceConsecutive = maxInv > 0 ? maxInv + 1 : 1;
+        }
+        this.cache.dbPath = stored.fileName || storedPath;
         this.isDatabaseLoaded = true;
-        this.databaseFileName = stored.fileName || 'inventario.json';
-        this.fileHandle = null;
+        this.databaseFileName = stored.fileName || storedPath;
+        this.dbPath = this.databaseFileName;
+        setStoredDbPath(this.dbPath);
+        this.fileHandle = stored.handle || null;
         this.lastSavedAt = stored.updatedAt ? new Date(stored.updatedAt) : new Date();
         this.hasUnsavedChangesFlag = false;
         this.saveStatus = 'saved';
+
+        if (this.fileHandle && typeof this.fileHandle.queryPermission === 'function') {
+          try {
+            const state = await this.fileHandle.queryPermission({ mode: 'readwrite' });
+            if (state !== 'granted') {
+              this.saveStatus = 'pending_manual';
+            }
+          } catch (e) {
+            console.warn('Error comprobando permisos iniciales:', e);
+          }
+        }
+
         this.notifyListeners();
         return true;
       }
     } catch (e) {
       console.warn('Error inicializando desde almacenamiento interno:', e);
     }
+
+    // Si aún no hay datos guardados previamente, inicializar con la ruta predeterminada
+    if (!this.isDatabaseLoaded) {
+      await this.createNewDatabase('inventario.json', true, null);
+      return true;
+    }
+
     return false;
   }
 
   /**
    * Carga una base de datos externa desde un archivo File (.db o .json).
-   * Lee productos, stock, plantillas y movimientos existentes.
+   * Almacena la ruta del archivo seleccionado en la variable de estado persistente dbPath.
    */
   public async loadFromFile(
     file: File,
@@ -428,6 +523,7 @@ class InventoryDatabase {
       let templates: InstallationTemplate[] = [];
       let movements: StockMovement[] = [];
       let version = 1;
+      let invoiceConsecutive = 1;
 
       if (text.trim().length === 0) {
         // Archivo nuevo en blanco
@@ -442,6 +538,21 @@ class InventoryDatabase {
             templates = Array.isArray(parsed.templates) ? parsed.templates : [];
             movements = Array.isArray(parsed.movements) ? parsed.movements : [];
             version = parsed.version || 1;
+            if (typeof parsed.invoiceConsecutive === 'number' && parsed.invoiceConsecutive > 0) {
+              invoiceConsecutive = parsed.invoiceConsecutive;
+            } else {
+              const maxInv = movements.reduce((max, m) => {
+                if (m.numeroFactura) {
+                  const match = m.numeroFactura.match(/\d+/);
+                  if (match) {
+                    const val = parseInt(match[0], 10);
+                    return val > max ? val : max;
+                  }
+                }
+                return max;
+              }, 0);
+              invoiceConsecutive = maxInv > 0 ? maxInv + 1 : 1;
+            }
           } else if (Array.isArray(parsed)) {
             // Compatibilidad si el archivo era una lista simple de productos
             products = parsed;
@@ -459,17 +570,24 @@ class InventoryDatabase {
         }
       }
 
+      // Guardar la ruta seleccionada en la variable persistente dbPath (ej: localStorage)
+      const selectedPath = file.name;
+      this.dbPath = selectedPath;
+      this.databaseFileName = selectedPath;
+      setStoredDbPath(selectedPath);
+
       this.cache = {
         version,
         app: 'Gestión de Inventario y Stock',
         updatedAt: new Date().toISOString(),
+        dbPath: selectedPath,
+        invoiceConsecutive,
         products,
         templates,
         movements,
       };
 
       this.isDatabaseLoaded = true;
-      this.databaseFileName = file.name;
       this.fileHandle = handle || null;
       this.lastSavedAt = new Date();
       this.hasUnsavedChangesFlag = false;
@@ -505,7 +623,7 @@ class InventoryDatabase {
   }
 
   /**
-   * Crea una nueva base de datos portátil en memoria y la asocia a un nombre de archivo.
+   * Crea una nueva base de datos portátil en memoria y guarda su ruta en dbPath.
    */
   public async createNewDatabase(
     fileName: string,
@@ -516,17 +634,22 @@ class InventoryDatabase {
       ? fileName.trim()
       : `${fileName.trim()}.json`;
 
+    this.dbPath = cleanFileName;
+    this.databaseFileName = cleanFileName;
+    setStoredDbPath(cleanFileName);
+
     this.cache = {
       version: 1,
       app: 'Gestión de Inventario y Stock',
       updatedAt: new Date().toISOString(),
+      dbPath: cleanFileName,
+      invoiceConsecutive: withSampleData ? 2 : 1,
       products: withSampleData ? [...SAMPLE_PRODUCTS] : [],
       templates: withSampleData ? [...SAMPLE_TEMPLATES] : [],
       movements: withSampleData ? [...SAMPLE_MOVEMENTS] : [],
     };
 
     this.isDatabaseLoaded = true;
-    this.databaseFileName = cleanFileName;
     this.fileHandle = handle || null;
     this.lastSavedAt = new Date();
     this.hasUnsavedChangesFlag = false;
@@ -556,7 +679,20 @@ class InventoryDatabase {
         this.saveStatus = 'saving';
         this.notifyListeners();
 
-        await verifyPermission(this.fileHandle, true);
+        // Si tenemos handle, comprobar permisos sin romper la operación
+        if (typeof this.fileHandle.queryPermission === 'function') {
+          try {
+            const perm = await this.fileHandle.queryPermission({ mode: 'readwrite' });
+            if (perm !== 'granted') {
+              this.saveStatus = 'pending_manual';
+              this.hasUnsavedChangesFlag = true;
+              this.notifyListeners();
+              return { success: false, message: 'Permiso de escritura pendiente.' };
+            }
+          } catch (pErr) {
+            // Ignorar y probar crear el writable
+          }
+        }
 
         // keepExistingData: false trunca y sobrescribe exactamente el archivo en uso
         const writable = await this.fileHandle.createWritable({ keepExistingData: false });
@@ -570,14 +706,14 @@ class InventoryDatabase {
         this.notifyListeners();
         return { success: true };
       } catch (err: any) {
-        console.error('Error al escribir en el archivo de base de datos en uso', err);
+        console.error('Error al sobrescribir automáticamente en el archivo en uso', err);
         this.saveStatus = 'pending_manual';
         this.hasUnsavedChangesFlag = true;
         await this.syncToIndexedDb();
         this.notifyListeners();
         return {
           success: false,
-          message: 'No se pudo escribir directamente en el archivo en uso. Comprueba permisos.',
+          message: 'Permiso de escritura pendiente. Pulsa "Guardar" para confirmar.',
         };
       }
     } else {
@@ -594,8 +730,10 @@ class InventoryDatabase {
   }
 
   /**
-   * Método principal para el botón único de Guardar Base de Datos.
-   * MODIFICA Y SOBRESCRIBE la base de datos en uso sin generar descargas duplicadas ni errores de cancelación.
+   * Método principal para el botón de "Guardar".
+   * Usa la ruta de base de datos almacenada en la variable persistente dbPath para abrir y escribir en ella.
+   * NO crea una nueva conexión ni un nuevo archivo con nombres generados con fecha (inventario_2026...db).
+   * Escribe y sobrescribe en la MISMA base de datos que el usuario eligió.
    */
   public async saveCurrentDatabase(): Promise<{
     success: boolean;
@@ -603,64 +741,65 @@ class InventoryDatabase {
     method: 'direct' | 'internal';
     message: string;
   }> {
-    if (!this.isDatabaseLoaded) {
-      return {
-        success: false,
-        fileName: '',
-        method: 'internal',
-        message: 'No hay ninguna base de datos activa seleccionada.',
-      };
+    const targetPath = this.getDbPath();
+    this.dbPath = targetPath;
+    this.databaseFileName = targetPath;
+    this.cache.dbPath = targetPath;
+    if (!this.cache.invoiceConsecutive) {
+      this.cache.invoiceConsecutive = 1;
     }
+    this.cache.updatedAt = new Date().toISOString();
+    this.isDatabaseLoaded = true;
 
-    const fileName = this.databaseFileName || 'inventario.json';
     const jsonContent = JSON.stringify(this.cache, null, 2);
 
-    // 1. Guardar y sincronizar de inmediato en el almacenamiento persistente interno (IndexedDB)
+    this.saveStatus = 'saving';
+    this.notifyListeners();
+
+    // 1. Guardar y sincronizar de inmediato en el almacenamiento persistente interno dual (IndexedDB + localStorage) en la misma dbPath
     await this.syncToIndexedDb();
 
-    // 2. Si hay un manejador de archivo directo en disco/pendrive vinculado, sobrescribir en el mismo archivo
+    // 2. Si hay un manejador de archivo directo en disco/pendrive vinculado para dbPath, escribir en ese MISMO archivo existente
     if (this.fileHandle && typeof this.fileHandle.createWritable === 'function') {
       try {
-        this.saveStatus = 'saving';
-        this.notifyListeners();
+        const hasPerm = await verifyPermission(this.fileHandle, true);
+        if (hasPerm) {
+          // keepExistingData: false trunca y sobrescribe exactamente el archivo existente en dbPath
+          const writable = await this.fileHandle.createWritable({ keepExistingData: false });
+          await writable.write(jsonContent);
+          await writable.close();
 
-        await verifyPermission(this.fileHandle, true);
+          this.lastSavedAt = new Date();
+          this.hasUnsavedChangesFlag = false;
+          this.saveStatus = 'saved';
+          await this.syncToIndexedDb();
+          this.notifyListeners();
 
-        // keepExistingData: false trunca y sobrescribe exactamente el archivo en uso
-        const writable = await this.fileHandle.createWritable({ keepExistingData: false });
-        await writable.write(jsonContent);
-        await writable.close();
-
-        this.lastSavedAt = new Date();
-        this.hasUnsavedChangesFlag = false;
-        this.saveStatus = 'saved';
-        await this.syncToIndexedDb();
-        this.notifyListeners();
-
-        return {
-          success: true,
-          fileName: this.databaseFileName || fileName,
-          method: 'direct',
-          message: `¡Base de datos modificada y guardada directamente en "${this.databaseFileName || fileName}"!`,
-        };
+          return {
+            success: true,
+            fileName: targetPath,
+            method: 'direct',
+            message: `¡Cambios guardados y actualizados en "${targetPath}"!`,
+          };
+        }
       } catch (err: any) {
-        console.warn('No se pudo escribir en el archivo físico del disco, pero los datos se guardaron internamente:', err);
+        console.warn('Advertencia al escribir directamente en el archivo vinculado:', err);
       }
     }
 
-    // 3. Confirmar guardado interno permanente de la base de datos en uso
-    // Esto garantiza que en la app / APK los cambios queden guardados inmediatamente
-    // sin generar archivos duplicados en descargas ni diálogos cancelados.
+    // 3. Los cambios quedan guardados y actualizados en la base de datos existente bajo dbPath.
+    // NUNCA crea archivos nuevos ni genera descargas duplicadas.
     this.lastSavedAt = new Date();
     this.hasUnsavedChangesFlag = false;
     this.saveStatus = 'saved';
+    await this.syncToIndexedDb();
     this.notifyListeners();
 
     return {
       success: true,
-      fileName,
+      fileName: targetPath,
       method: 'internal',
-      message: `¡Base de datos "${fileName}" guardada y actualizada con éxito!`,
+      message: `¡Cambios guardados correctamente en "${targetPath}"!`,
     };
   }
 
@@ -676,23 +815,29 @@ class InventoryDatabase {
 
   /**
    * Cierra o desconecta la base de datos actual.
+   * Si clearStorage es false, no borra los datos guardados en el almacenamiento interno.
    */
-  public disconnectDatabase(): void {
-    this.cache = {
-      version: 1,
-      app: 'Gestión de Inventario y Stock',
-      updatedAt: new Date().toISOString(),
-      products: [],
-      templates: [],
-      movements: [],
-    };
-    this.isDatabaseLoaded = false;
-    this.databaseFileName = null;
-    this.fileHandle = null;
-    this.lastSavedAt = null;
-    this.hasUnsavedChangesFlag = false;
-    this.saveStatus = 'idle';
-    clearActiveDatabaseInIndexedDb();
+  public disconnectDatabase(clearStorage: boolean = false): void {
+    if (clearStorage) {
+      clearActiveDatabaseInIndexedDb();
+      this.cache = {
+        version: 1,
+        app: 'Gestión de Inventario y Stock',
+        updatedAt: new Date().toISOString(),
+        products: [],
+        templates: [],
+        movements: [],
+      };
+      this.isDatabaseLoaded = false;
+      this.databaseFileName = null;
+      this.fileHandle = null;
+      this.lastSavedAt = null;
+      this.hasUnsavedChangesFlag = false;
+      this.saveStatus = 'idle';
+    } else {
+      this.hasUnsavedChangesFlag = false;
+      this.saveStatus = 'saved';
+    }
     this.notifyListeners();
   }
 
@@ -707,16 +852,24 @@ class InventoryDatabase {
       updatedAt: new Date().toISOString(),
     };
 
-    // Marca cambio pendiente de guardar
-    this.hasUnsavedChangesFlag = true;
-    this.saveStatus = 'pending_manual';
-    this.notifyListeners();
+    if (!this.isDatabaseLoaded) {
+      this.isDatabaseLoaded = true;
+    }
+    if (!this.databaseFileName) {
+      this.databaseFileName = 'inventario.json';
+    }
 
-    // Guardado automático inmediato en el archivo externo si tenemos handle directo
+    // 1. Sincronización inmediata a IndexedDB y localStorage a prueba de pérdidas
+    this.syncToIndexedDb();
+
+    // 2. Sobrescribir inmediatamente en el archivo físico vinculado si existe
     if (this.fileHandle) {
       this.saveToFile();
+    } else {
+      this.hasUnsavedChangesFlag = true;
+      this.saveStatus = 'pending_manual';
+      this.notifyListeners();
     }
-    this.syncToIndexedDb();
   }
 
   // --- Products CRUD ---
@@ -835,6 +988,7 @@ class InventoryDatabase {
     plantillaNombre?: string;
     motivo: string;
     cliente?: string;
+    numeroFactura?: string;
     items: { productoId: string; cantidad: number }[];
     observaciones?: string;
     usuarioResponsable?: string;
@@ -848,6 +1002,22 @@ class InventoryDatabase {
 
     if (!params.motivo || params.motivo.trim() === '') {
       return { success: false, error: 'Debe especificar el motivo del movimiento (ej: "Instalación cliente Pérez").' };
+    }
+
+    // Gestionar el número consecutivo de factura que se guarda en esta misma base de datos
+    let facturaFinal = params.numeroFactura?.trim();
+    if (!facturaFinal) {
+      facturaFinal = this.getNextInvoiceNumber();
+      const currentConsecutive = this.getInvoiceConsecutive();
+      data.invoiceConsecutive = currentConsecutive + 1;
+    } else {
+      const match = facturaFinal.match(/\d+/);
+      if (match) {
+        const val = parseInt(match[0], 10);
+        if (!isNaN(val) && val >= (data.invoiceConsecutive || 1)) {
+          data.invoiceConsecutive = val + 1;
+        }
+      }
     }
 
     const movementItems: StockMovementItem[] = [];
@@ -896,6 +1066,7 @@ class InventoryDatabase {
       fechaHora: nowIso,
       motivo: params.motivo.trim(),
       cliente: params.cliente?.trim(),
+      numeroFactura: facturaFinal,
       plantillaId: params.plantillaId,
       plantillaNombre: params.plantillaNombre,
       items: movementItems,
@@ -983,11 +1154,27 @@ class InventoryDatabase {
     tipo: 'SALIDA_MANUAL' | 'AJUSTE_INVENTARIO';
     motivo: string;
     cliente?: string;
+    numeroFactura?: string;
     items: { productoId: string; cantidad: number }[];
     observaciones?: string;
   }): { success: boolean; movement?: StockMovement; error?: string } {
     const data = this.getData();
     const nowIso = new Date().toISOString();
+
+    let facturaFinal = params.numeroFactura?.trim();
+    if (params.tipo === 'SALIDA_MANUAL' && !facturaFinal) {
+      facturaFinal = this.getNextInvoiceNumber();
+      const currentConsecutive = this.getInvoiceConsecutive();
+      data.invoiceConsecutive = currentConsecutive + 1;
+    } else if (facturaFinal) {
+      const match = facturaFinal.match(/\d+/);
+      if (match) {
+        const val = parseInt(match[0], 10);
+        if (!isNaN(val) && val >= (data.invoiceConsecutive || 1)) {
+          data.invoiceConsecutive = val + 1;
+        }
+      }
+    }
 
     const movementItems: StockMovementItem[] = [];
     let costoTotal = 0;
@@ -1031,6 +1218,7 @@ class InventoryDatabase {
       fechaHora: nowIso,
       motivo: params.motivo.trim() || 'Salida manual de almacén',
       cliente: params.cliente?.trim(),
+      numeroFactura: facturaFinal,
       items: movementItems,
       costoTotal: Math.round(costoTotal * 100) / 100,
       ingresoTotal: Math.round(ingresoTotal * 100) / 100,

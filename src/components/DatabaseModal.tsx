@@ -12,10 +12,16 @@ import {
   RefreshCw,
   LogOut,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  FolderSync
 } from 'lucide-react';
 import { dbService } from '../services/db';
-import { downloadDatabaseBlob, pickDatabaseFile, createDatabaseFileHandle } from '../utils/fileDatabase';
+import {
+  downloadDatabaseBlob,
+  pickDatabaseFile,
+  createDatabaseFileHandle,
+  pickDatabaseDirectory
+} from '../utils/fileDatabase';
 import { formatDateTime } from '../utils/formatters';
 
 interface DatabaseModalProps {
@@ -44,6 +50,8 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({
   const productsCount = dbService.getProducts().length;
   const movementsCount = dbService.getMovements().length;
   const templatesCount = dbService.getTemplates().length;
+  const dbPath = dbService.getDbPath();
+  const nextInvoiceNumber = dbService.getNextInvoiceNumber();
 
   const handleSelectExisting = async () => {
     setIsLoading(true);
@@ -111,13 +119,27 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({
   };
 
   const handleBindWritableHandle = async () => {
-    if (!dbFileName) return;
+    const targetName = dbFileName || 'inventario.json';
     try {
-      const handle = await createDatabaseFileHandle(dbFileName);
+      const handle = await createDatabaseFileHandle(targetName);
       if (handle) {
         dbService.setFileHandle(handle);
         await dbService.saveToFile();
-        onShowToast('Archivo vinculado con guardado automático directo en disco', 'success');
+        onShowToast(`Archivo "${handle.name}" vinculado para guardado directo continuo`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSelectFolder = async () => {
+    const targetName = dbFileName || 'inventario.json';
+    try {
+      const dirResult = await pickDatabaseDirectory(targetName);
+      if (dirResult && dirResult.fileHandle) {
+        dbService.setFileHandle(dirResult.fileHandle);
+        await dbService.saveToFile();
+        onShowToast(`Carpeta vinculada: escribiendo en "${dirResult.fileHandle.name}"`, 'success');
       }
     } catch (err) {
       console.error(err);
@@ -125,8 +147,11 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({
   };
 
   const handleDisconnect = () => {
-    dbService.disconnectDatabase();
-    onShowToast('Base de datos desconectada', 'info');
+    if (window.confirm('¿Deseas cerrar la base de datos actual? Tus datos seguirán guardados en la aplicación para cuando vuelvas.')) {
+      dbService.disconnectDatabase(false);
+      onShowToast('Base de datos guardada', 'info');
+      onClose();
+    }
   };
 
   const handleSaveDatabaseNow = async () => {
@@ -187,9 +212,9 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                   hasWritable
                     ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-900'
+                    : 'bg-emerald-100 text-emerald-800'
                 }`}>
-                  {hasWritable ? 'Guardado directo en disco' : 'Guardado en sesión'}
+                  {hasWritable ? 'Guardado directo en archivo' : 'Guardado automático activo'}
                 </span>
               )}
             </div>
@@ -208,6 +233,22 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({
                   <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
                     <span className="text-slate-400 text-[10px] block">Plantillas</span>
                     <strong className="text-slate-900 font-mono text-sm">{templatesCount}</strong>
+                  </div>
+                </div>
+
+                {/* Ruta persistente y consecutivo de factura */}
+                <div className="bg-white/90 p-2.5 rounded-lg border border-emerald-100 space-y-1 text-[11px]">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="font-semibold text-slate-700">Ruta / Archivo recordado:</span>
+                    <span className="font-mono text-emerald-800 font-bold max-w-[260px] truncate" title={dbPath || dbFileName || ''}>
+                      {dbPath || dbFileName || 'inventario.json'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600 border-t border-slate-100 pt-1">
+                    <span className="font-semibold text-slate-700">Siguiente consecutivo factura:</span>
+                    <span className="font-mono text-emerald-800 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      {nextInvoiceNumber}
+                    </span>
                   </div>
                 </div>
 
@@ -252,15 +293,27 @@ export const DatabaseModal: React.FC<DatabaseModalProps> = ({
                   </button>
 
                   {!hasWritable && (
-                    <button
-                      type="button"
-                      onClick={handleBindWritableHandle}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer"
-                      title="Permite que el navegador escriba directamente en el archivo sin necesidad de descargar copias"
-                    >
-                      <HardDrive className="w-3.5 h-3.5" />
-                      <span>Vincular guardado automático directo</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleBindWritableHandle}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs"
+                        title="Elige dónde guardar con showSaveFilePicker para recordar el archivo y escribir directamente en él"
+                      >
+                        <HardDrive className="w-3.5 h-3.5" />
+                        <span>Vincular archivo directo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSelectFolder}
+                        className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-xs"
+                        title="Elige una carpeta con showDirectoryPicker para guardar y actualizar el archivo dentro de ella"
+                      >
+                        <FolderSync className="w-3.5 h-3.5" />
+                        <span>Vincular carpeta</span>
+                      </button>
+                    </>
                   )}
 
                   <button

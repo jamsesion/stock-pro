@@ -1,6 +1,7 @@
 /**
  * Utilities for portable external database file handling
- * Supports File System Access API (Chromium) and HTML5 File Input fallback
+ * Replaced showOpenFilePicker (which is blocked by cross-origin iframes) with standard HTML5 file input,
+ * while utilizing showSaveFilePicker and showDirectoryPicker to establish and persist direct writable handles.
  */
 
 export interface PickFileResult {
@@ -9,73 +10,43 @@ export interface PickFileResult {
 }
 
 /**
- * Verify or request readwrite permission for a FileSystemFileHandle
+ * Verify or request readwrite permission for a FileSystemFileHandle or FileSystemDirectoryHandle
  */
 export async function verifyPermission(
-  fileHandle: any,
+  handle: any,
   readWrite: boolean = true
 ): Promise<boolean> {
-  if (!fileHandle) return false;
+  if (!handle) return false;
   const options: any = {};
   if (readWrite) {
     options.mode = 'readwrite';
   }
   try {
-    if (typeof fileHandle.queryPermission === 'function') {
-      const state = await fileHandle.queryPermission(options);
+    if (typeof handle.queryPermission === 'function') {
+      const state = await handle.queryPermission(options);
       if (state === 'granted') {
         return true;
       }
     }
-    if (typeof fileHandle.requestPermission === 'function') {
-      const requestedState = await fileHandle.requestPermission(options);
+    if (typeof handle.requestPermission === 'function') {
+      const requestedState = await handle.requestPermission(options);
       return requestedState === 'granted';
     }
   } catch (err) {
-    console.warn('Error verificando permisos de archivo:', err);
+    console.warn('Error verificando permisos de archivo/directorio:', err);
   }
   return false;
 }
 
 /**
- * Prompt user to select an existing portable database file (.json or .db)
- * Fixed MIME-type mapping without duplicate file extensions across types to prevent browser TypeError
+ * Selector estándar de archivo con <input type="file">.
+ * NO utiliza showOpenFilePicker para evitar el error de iframe:
+ * "Failed to execute 'showOpenFilePicker' on 'Window': Cross origin sub frames aren't allowed to show a file picker."
  */
 export async function pickDatabaseFile(
   fileInputFallback?: HTMLInputElement | null
 ): Promise<PickFileResult | null> {
-  // Try File System Access API if available
-  if (typeof window !== 'undefined' && 'showOpenFilePicker' in window) {
-    try {
-      const [handle] = await (window as any).showOpenFilePicker({
-        types: [
-          {
-            description: 'Base de datos de inventario (*.json, *.db)',
-            accept: {
-              'application/json': ['.json'],
-              'application/octet-stream': ['.db', '.sqlite'],
-              'text/plain': ['.txt'],
-            },
-          },
-        ],
-        multiple: false,
-      });
-
-      if (handle) {
-        // Request write permission upfront while inside the user click gesture
-        await verifyPermission(handle, true);
-        const file = await handle.getFile();
-        return { file, handle };
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return null;
-      }
-      console.warn('showOpenFilePicker no disponible o denegado, usando selector estándar:', err);
-    }
-  }
-
-  // Fallback to HTML input if handle not supported or blocked
+  // If an existing input element ref is provided, use it
   if (fileInputFallback) {
     return new Promise((resolve) => {
       const handleChange = (e: Event) => {
@@ -92,11 +63,53 @@ export async function pickDatabaseFile(
     });
   }
 
-  return null;
+  // Otherwise create a temporary standard file input element
+  return new Promise((resolve) => {
+    const tempInput = document.createElement('input');
+    tempInput.type = 'file';
+    tempInput.accept = '.json,.db,.sqlite,application/json';
+    tempInput.style.display = 'none';
+    document.body.appendChild(tempInput);
+
+    const cleanup = () => {
+      if (tempInput.parentNode) {
+        document.body.removeChild(tempInput);
+      }
+    };
+
+    tempInput.addEventListener('change', (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      if (target.files && target.files.length > 0) {
+        const selectedFile = target.files[0];
+        cleanup();
+        resolve({ file: selectedFile, handle: null });
+      } else {
+        cleanup();
+        resolve(null);
+      }
+    });
+
+    // Handle cancelation or clicking away
+    window.addEventListener(
+      'focus',
+      () => {
+        setTimeout(() => {
+          if (!tempInput.files || tempInput.files.length === 0) {
+            cleanup();
+            resolve(null);
+          }
+        }, 1000);
+      },
+      { once: true }
+    );
+
+    tempInput.click();
+  });
 }
 
 /**
- * Prompt user to create or select a file to save/overwrite on disk (returns handle)
+ * Permite al usuario elegir dónde guardar el archivo usando showSaveFilePicker,
+ * obteniendo un FileSystemFileHandle con permisos de escritura directa para persistirlo y reutilizarlo.
  */
 export async function createDatabaseFileHandle(
   suggestedName: string = 'inventario.json'
@@ -117,20 +130,50 @@ export async function createDatabaseFileHandle(
       });
       if (handle) {
         await verifyPermission(handle, true);
+        return handle;
       }
-      return handle;
     } catch (err: any) {
       if (err.name === 'AbortError') {
         return null;
       }
-      console.warn('showSaveFilePicker error o cancelado:', err);
+      console.warn('showSaveFilePicker no disponible o cancelado:', err);
     }
   }
   return null;
 }
 
 /**
- * Triggers browser download of a database blob (for pendrive / email)
+ * Alternativa: Permite al usuario elegir una carpeta usando showDirectoryPicker
+ * para guardar y leer la base de datos de manera persistente dentro de esa carpeta.
+ */
+export async function pickDatabaseDirectory(
+  databaseFileName: string = 'inventario.json'
+): Promise<{ dirHandle: any; fileHandle: FileSystemFileHandle } | null> {
+  if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+    try {
+      const dirHandle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite',
+      });
+      if (dirHandle) {
+        await verifyPermission(dirHandle, true);
+        const fileHandle = await dirHandle.getFileHandle(databaseFileName, { create: true });
+        if (fileHandle) {
+          await verifyPermission(fileHandle, true);
+          return { dirHandle, fileHandle };
+        }
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return null;
+      }
+      console.warn('showDirectoryPicker no disponible o cancelado:', err);
+    }
+  }
+  return null;
+}
+
+/**
+ * Descarga una copia de la base de datos completa como blob (respaldo para pendrive o correo)
  */
 export function downloadDatabaseBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);

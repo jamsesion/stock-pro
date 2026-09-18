@@ -98,13 +98,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Stock<span className="text-amber-400">Pro</span>
                 </span>
                 {isDbLoaded ? (
-                  <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border hidden xs:inline-flex items-center gap-1 ${
-                    hasUnsavedChanges
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`}></span>
-                    {hasUnsavedChanges ? 'Sin Guardar' : 'Al Día'}
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border hidden xs:inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    {hasUnsavedChanges ? 'Modificada' : 'Al Día'}
                   </span>
                 ) : (
                   <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 hidden xs:inline">
@@ -118,52 +114,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Controls: Save Button + Database Selection + Actions */}
+          {/* Controls: Database Selection + Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto">
             {isDbLoaded ? (
               <div className="flex items-center gap-1.5 sm:gap-2">
-                {/* REQUIRED: Un solo botón para guardar los datos en la base de datos actual */}
-                <button
-                  type="button"
-                  id="btn-save-current-database"
-                  onClick={onSaveCurrentDatabase}
-                  className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black shadow-md transition active:scale-95 cursor-pointer ${
-                    hasUnsavedChanges
-                      ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 ring-2 ring-amber-400/60 shadow-amber-500/20 animate-pulse'
-                      : 'bg-slate-800 hover:bg-slate-750 text-emerald-300 border border-emerald-500/40'
-                  }`}
-                  title={
-                    hasUnsavedChanges
-                      ? `Haz clic para modificar y sobrescribir los cambios en ${dbFileName}`
-                      : `Todos los datos están sincronizados en ${dbFileName}`
-                  }
-                >
-                  {saveStatus === 'saving' ? (
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                  ) : (
-                    <Save className={`w-4 h-4 ${hasUnsavedChanges ? 'text-slate-950' : 'text-emerald-400'}`} />
-                  )}
-                  <span className="flex items-center gap-1.5">
-                    <span>
-                      {saveStatus === 'saving'
-                        ? 'Guardando...'
-                        : hasUnsavedChanges
-                        ? 'Guardar base de datos'
-                        : 'Base de datos guardada'}
-                    </span>
-                    {hasUnsavedChanges && (
-                      <span className="w-2 h-2 rounded-full bg-red-600 inline-block" />
-                    )}
-                    {!hasUnsavedChanges && saveStatus !== 'saving' && (
-                      <Check className="w-3.5 h-3.5 text-emerald-400 hidden sm:inline" />
-                    )}
-                  </span>
-                </button>
-
                 {/* Database Pill (click to manage) */}
                 <button
                   onClick={onOpenDatabaseModal}
-                  className="hidden md:flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700 text-left transition cursor-pointer text-xs font-mono text-slate-300 hover:text-white"
+                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700 text-left transition cursor-pointer text-xs font-mono text-slate-300 hover:text-white"
                   title="Gestionar archivo o cambiar de base de datos"
                 >
                   <Database className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -217,15 +175,38 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden md:inline">Registrar</span> Instalación
               </button>
 
+              {/* Botón Guardar Base de Datos con icono de disquete (reemplaza a + Nuevo Producto) */}
               <button
-                id="btn-quick-new-product"
-                onClick={onNewProduct}
+                type="button"
+                id="btn-save-current-database"
+                onClick={onSaveCurrentDatabase}
                 disabled={!isDbLoaded}
-                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs sm:text-sm font-medium border border-slate-700 transition cursor-pointer"
-                title="Crear nuevo producto en catálogo"
+                className={`inline-flex items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl font-semibold shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-40 ${
+                  hasUnsavedChanges
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/20 ring-2 ring-emerald-400'
+                    : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:text-white'
+                }`}
+                title={
+                  !isDbLoaded
+                    ? 'No hay base de datos cargada'
+                    : hasUnsavedChanges
+                    ? `Guardar y sobrescribir en ${dbFileName}`
+                    : `Base de datos guardada (${dbFileName})`
+                }
+                aria-label="Guardar base de datos"
               >
-                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-                <span className="hidden sm:inline">Nuevo</span> Producto
+                {saveStatus === 'saving' ? (
+                  <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 sm:w-5 sm:h-5" />
+                )}
+                <span className="hidden sm:inline text-xs font-bold ml-1.5">
+                  {saveStatus === 'saving'
+                    ? 'Guardando...'
+                    : hasUnsavedChanges
+                    ? 'Guardar'
+                    : 'Guardado'}
+                </span>
               </button>
             </div>
           </div>

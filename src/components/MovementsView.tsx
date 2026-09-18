@@ -54,6 +54,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
       const matchesSearch =
         m.motivo.toLowerCase().includes(search.toLowerCase()) ||
         (m.cliente && m.cliente.toLowerCase().includes(search.toLowerCase())) ||
+        (m.numeroFactura && m.numeroFactura.toLowerCase().includes(search.toLowerCase())) ||
         (m.plantillaNombre && m.plantillaNombre.toLowerCase().includes(search.toLowerCase())) ||
         (m.fechaHora && m.fechaHora.includes(search)) ||
         m.items.some((i) => i.productoNombre.toLowerCase().includes(search.toLowerCase()));
@@ -108,6 +109,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
   const exportCSV = () => {
     const headers = [
       'ID',
+      'Nº Factura',
       'Fecha y Hora',
       'Tipo',
       'Motivo',
@@ -123,6 +125,7 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
       const itemsSummary = m.items.map(i => `${i.productoNombre}: ${i.cantidad} ${i.unidadMedida}`).join(' | ');
       return [
         m.id,
+        `"${(m.numeroFactura || '').replace(/"/g, '""')}"`,
         `"${formatDateTime(m.fechaHora)}"`,
         m.tipo,
         `"${m.motivo.replace(/"/g, '""')}"`,
@@ -339,6 +342,12 @@ export const MovementsView: React.FC<MovementsViewProps> = ({
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
                             {formatDateTime(movement.fechaHora)}
                           </span>
+
+                          {movement.numeroFactura && (
+                            <span className="text-[11px] font-bold font-mono text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded shadow-2xs">
+                              {movement.numeroFactura}
+                            </span>
+                          )}
                         </div>
 
                         {/* Motivo del movimiento (Prominent per requirements) */}
