@@ -9,6 +9,7 @@ interface ProductFormModalProps {
   onSave: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   initialProduct?: Product | null;
   categories: string[];
+  allProducts?: Product[];
 }
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
@@ -17,6 +18,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   onSave,
   initialProduct,
   categories,
+  allProducts = [],
 }) => {
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('');
@@ -31,7 +33,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [notas, setNotas] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Reset limpio al abrir o cambiar de producto
   useEffect(() => {
+    if (!isOpen) return;
+
     if (initialProduct) {
       setNombre(initialProduct.nombre);
       setCategoria(initialProduct.categoria);
@@ -58,11 +63,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setNotas('');
     }
     setErrors({});
-  }, [initialProduct, isOpen, categories]);
+  }, [initialProduct, isOpen]);
 
   if (!isOpen) return null;
 
-  // Real-time automatic profit calculation: Precio de venta - Precio de compra
   const numVenta = typeof precioVenta === 'number' ? precioVenta : 0;
   const numCompra = typeof precioCompra === 'number' ? precioCompra : 0;
   const { ganancia, margenPorcentaje } = calculateProfit(numVenta, numCompra);
@@ -78,6 +82,18 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (precioCompra === '' || Number(precioCompra) < 0) newErrors.precioCompra = 'Precio no válido.';
     if (precioVenta === '' || Number(precioVenta) < 0) newErrors.precioVenta = 'Precio no válido.';
     if (!fechaEntrada) newErrors.fechaEntrada = 'Requerido.';
+
+    // Anti-duplicados: comprobar que no exista otro producto con el mismo nombre
+    // (excepto el propio producto si estamos editando)
+    const nombreNormalizado = nombre.trim().toLowerCase();
+    const duplicado = allProducts.find(
+      (p) =>
+        p.nombre.trim().toLowerCase() === nombreNormalizado &&
+        p.id !== initialProduct?.id
+    );
+    if (duplicado) {
+      newErrors.nombre = `Ya existe un producto con ese nombre ("${duplicado.nombre}").`;
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -105,7 +121,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-xl sm:rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh] my-auto animate-in fade-in zoom-in-95">
-        {/* Header - Compact */}
+        {/* Header */}
         <div className="bg-slate-900 text-white px-5 py-3 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-base font-bold leading-tight">
@@ -123,10 +139,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </button>
         </div>
 
-        {/* Form Body - Compact & Responsive Layout */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1 text-xs">
-            {/* Row 1: Nombre (60%) & Categoría (40%) */}
+            {/* Row 1: Nombre & Categoría */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-7">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -143,7 +158,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     errors.nombre ? 'border-red-500 bg-red-50' : 'border-slate-300'
                   }`}
                 />
-                {errors.nombre && <p className="text-[10px] text-red-500 mt-0.5">{errors.nombre}</p>}
+                {errors.nombre && (
+                  <p className="text-[10px] text-red-500 mt-0.5">{errors.nombre}</p>
+                )}
               </div>
 
               <div className="sm:col-span-5">
@@ -191,7 +208,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               </div>
             </div>
 
-            {/* Row 2: Proveedor, Fecha de Entrada y Ubicación (3 cols) */}
+            {/* Row 2: Proveedor, Fecha, Ubicación */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -208,7 +225,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     errors.proveedor ? 'border-red-500 bg-red-50' : 'border-slate-300'
                   }`}
                 />
-                {errors.proveedor && <p className="text-[10px] text-red-500 mt-0.5">{errors.proveedor}</p>}
+                {errors.proveedor && (
+                  <p className="text-[10px] text-red-500 mt-0.5">{errors.proveedor}</p>
+                )}
               </div>
 
               <div>
@@ -240,7 +259,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               </div>
             </div>
 
-            {/* Row 3: Stock Actual, Stock Mínimo & Unidad de medida (Compact Strip) */}
+            {/* Row 3: Stock */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -294,16 +313,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               </div>
             </div>
 
-            {/* Row 4: Precios y Cálculo Automático de Ganancia (Single Compact Card) */}
+            {/* Row 4: Precios */}
             <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
                   <Calculator className="w-3.5 h-3.5 text-amber-600" />
                   Precios y Ganancia (Venta - Compra)
                 </span>
-                <span className="text-[10px] text-amber-700 font-medium">
-                  Cálculo automático
-                </span>
+                <span className="text-[10px] text-amber-700 font-medium">Cálculo automático</span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
@@ -343,24 +360,33 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
                 <div className="bg-white p-2 rounded-lg border border-amber-200/90 text-center">
                   <span className="text-[10px] text-slate-500 block">Ganancia / ud:</span>
-                  <span className={`text-xs sm:text-sm font-extrabold font-mono ${ganancia >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  <span
+                    className={`text-xs sm:text-sm font-extrabold font-mono ${
+                      ganancia >= 0 ? 'text-emerald-700' : 'text-red-600'
+                    }`}
+                  >
                     {formatCurrency(ganancia)}
                   </span>
                 </div>
 
                 <div className="bg-white p-2 rounded-lg border border-amber-200/90 text-center">
                   <span className="text-[10px] text-slate-500 block">Margen:</span>
-                  <span className={`inline-block text-[11px] font-bold px-1.5 py-0.2 rounded-full ${
-                    margenPorcentaje >= 25 ? 'bg-emerald-100 text-emerald-800' :
-                    margenPorcentaje > 0 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                  }`}>
+                  <span
+                    className={`inline-block text-[11px] font-bold px-1.5 py-0.2 rounded-full ${
+                      margenPorcentaje >= 25
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : margenPorcentaje > 0
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
                     {margenPorcentaje}%
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Row 5: Notas u Observaciones (Compact) */}
+            {/* Row 5: Notas */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Notas u Observaciones <span className="text-slate-400 font-normal lowercase">(opcional)</span>
@@ -376,7 +402,6 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
           </div>
 
-          {/* Footer - Compact */}
           <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
             <button
               type="button"

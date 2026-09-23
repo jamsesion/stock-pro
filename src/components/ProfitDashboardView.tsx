@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { exportToCsv } from '../utils/csv';
 import { 
   TrendingUp, 
   Calendar, 
@@ -81,40 +82,33 @@ export const ProfitDashboardView: React.FC<ProfitDashboardViewProps> = ({ moveme
   const margenPromedio = totalIngresos > 0 ? Math.round((totalGanancia / totalIngresos) * 1000) / 10 : 0;
 
   const exportProfitCSV = () => {
-    const headers = [
-      'Fecha y Hora',
-      'Motivo / Instalación',
-      'Cliente',
-      'Plantilla Utilizada',
-      'Ingreso Bruto (€)',
-      'Coste Materiales (€)',
-      'Ganancia Neta (€)',
-      'Margen (%)'
+  const headers = [
+    'Fecha y Hora', 'Motivo', 'Cliente', 'Plantilla',
+    'Ingreso Bruto', 'Coste Materiales', 'Ganancia Neta', 'Margen %',
+  ];
+
+  const rows = filteredSales.map((m) => {
+    const margin = m.ingresoTotal > 0
+      ? Math.round((m.gananciaTotal / m.ingresoTotal) * 100)
+      : 0;
+    return [
+      formatDateTime(m.fechaHora),
+      m.motivo,
+      m.cliente || '',
+      m.plantillaNombre || 'Personalizada',
+      m.ingresoTotal,
+      m.costoTotal,
+      m.gananciaTotal,
+      margin,
     ];
+  });
 
-    const rows = filteredSales.map((m) => {
-      const margin = m.ingresoTotal > 0 ? Math.round((m.gananciaTotal / m.ingresoTotal) * 100) : 0;
-      return [
-        `"${formatDateTime(m.fechaHora)}"`,
-        `"${m.motivo.replace(/"/g, '""')}"`,
-        `"${(m.cliente || '').replace(/"/g, '""')}"`,
-        `"${(m.plantillaNombre || 'Personalizada').replace(/"/g, '""')}"`,
-        m.ingresoTotal,
-        m.costoTotal,
-        m.gananciaTotal,
-        margin
-      ];
-    });
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `informe_ganancias_${preset}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  exportToCsv(
+    `informe_ganancias_${preset}_${new Date().toISOString().split('T')[0]}.csv`,
+    headers,
+    rows
+  );
+};
 
   return (
     <div className="space-y-5">

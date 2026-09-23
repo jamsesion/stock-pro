@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, PackagePlus, AlertCircle, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
-import { Product, MovementType } from '../types';
+import { Product } from '../types';
 
 interface StockAdjustmentModalProps {
   isOpen: boolean;
@@ -42,15 +42,29 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   const [observaciones, setObservaciones] = useState('');
   const [error, setError] = useState('');
 
+  // Reset COMPLETO cada vez que se abre
   useEffect(() => {
+    if (!isOpen) return;
+
+    setMode('ENTRADA');
+    setMotivo('Recepción de pedido de proveedor');
+    setCantidad(10);
+    setCliente('');
+    setObservaciones('');
+    setError('');
+
     if (selectedProduct) {
       setProductoId(selectedProduct.id);
       setPrecioCompra(selectedProduct.precioCompra);
       setProveedor(selectedProduct.proveedor);
-    } else if (products.length > 0 && !productoId) {
+    } else if (products.length > 0) {
       setProductoId(products[0].id);
       setPrecioCompra(products[0].precioCompra);
       setProveedor(products[0].proveedor);
+    } else {
+      setProductoId('');
+      setPrecioCompra('');
+      setProveedor('');
     }
   }, [selectedProduct, products, isOpen]);
 
@@ -105,7 +119,11 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
       });
     } else {
       if (currentProduct && numCant > currentProduct.stockActual) {
-        if (!confirm(`Atención: La cantidad a retirar (${numCant}) supera el stock actual (${currentProduct.stockActual}). ¿Continuar de todos modos?`)) {
+        if (
+          !confirm(
+            `Atención: La cantidad a retirar (${numCant}) supera el stock actual (${currentProduct.stockActual}). ¿Continuar de todos modos?`
+          )
+        ) {
           return;
         }
       }
@@ -132,7 +150,6 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
-        {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-amber-500 text-slate-950 rounded-lg">
@@ -142,7 +159,9 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               <h3 className="text-base font-bold">
                 {mode === 'ENTRADA' ? 'Entrada de Mercancía / Reposición' : 'Salida Manual de Stock'}
               </h3>
-              <p className="text-xs text-slate-400">Actualiza las existencias y registra fecha exacta y motivo</p>
+              <p className="text-xs text-slate-400">
+                Actualiza las existencias y registra fecha exacta y motivo
+              </p>
             </div>
           </div>
           <button
@@ -153,15 +172,12 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
           </button>
         </div>
 
-        {/* Mode Selector */}
         <div className="flex border-b border-slate-200 bg-slate-50 p-2 gap-2">
           <button
             type="button"
             onClick={() => handleModeChange('ENTRADA')}
             className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition ${
-              mode === 'ENTRADA'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-200'
+              mode === 'ENTRADA' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
             }`}
           >
             <ArrowDownToLine className="w-4 h-4" />
@@ -189,7 +205,6 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
             </div>
           )}
 
-          {/* Product Selector */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Producto *
@@ -208,7 +223,6 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
             </select>
           </div>
 
-          {/* Current Stock vs New Stock Preview */}
           {currentProduct && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
               <div>
@@ -216,21 +230,26 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
                 <span className="text-sm font-bold text-slate-800">
                   {currentProduct.stockActual} {currentProduct.unidadMedida || 'ud'}
                 </span>
-                <span className="text-[11px] text-slate-400 block">Mínimo: {currentProduct.stockMinimo}</span>
+                <span className="text-[11px] text-slate-400 block">
+                  Mínimo: {currentProduct.stockMinimo}
+                </span>
               </div>
               <div className="text-center font-bold text-slate-400">
                 {mode === 'ENTRADA' ? '+' : '-'} {cantidad || 0}
               </div>
               <div className="text-right">
                 <span className="text-xs text-slate-500 block">Stock Resultante:</span>
-                <span className={`text-base font-extrabold ${newProjectedStock < currentProduct.stockMinimo ? 'text-amber-600' : 'text-emerald-600'}`}>
+                <span
+                  className={`text-base font-extrabold ${
+                    newProjectedStock < currentProduct.stockMinimo ? 'text-amber-600' : 'text-emerald-600'
+                  }`}
+                >
                   {newProjectedStock} {currentProduct.unidadMedida || 'ud'}
                 </span>
               </div>
             </div>
           )}
 
-          {/* Cantidad */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -259,7 +278,9 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
                   min="0"
                   step="0.01"
                   value={precioCompra}
-                  onChange={(e) => setPrecioCompra(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) =>
+                    setPrecioCompra(e.target.value === '' ? '' : Number(e.target.value))
+                  }
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm"
                 />
               </div>
@@ -280,7 +301,6 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
             )}
           </div>
 
-          {/* Motivo */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Motivo del Movimiento *
@@ -289,14 +309,17 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               id="input-stock-motivo"
               type="text"
               required
-              placeholder={mode === 'ENTRADA' ? 'Ej: Recepción pedido SolarDistribución SL' : 'Ej: Rotura en transporte / Venta directa'}
+              placeholder={
+                mode === 'ENTRADA'
+                  ? 'Ej: Recepción pedido SolarDistribución SL'
+                  : 'Ej: Rotura en transporte / Venta directa'
+              }
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-amber-500"
             />
           </div>
 
-          {/* Observaciones */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Observaciones o Albarán
@@ -311,7 +334,6 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
             />
           </div>
 
-          {/* Actions */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
@@ -324,7 +346,9 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               type="submit"
               id="btn-confirm-stock-adjustment"
               className={`px-5 py-2 text-sm font-bold text-white rounded-lg shadow-sm flex items-center gap-2 transition ${
-                mode === 'ENTRADA' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+                mode === 'ENTRADA'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-amber-600 hover:bg-amber-700'
               }`}
             >
               {mode === 'ENTRADA' ? 'Registrar Entrada' : 'Registrar Salida'}

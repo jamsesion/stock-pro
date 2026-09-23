@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  Layers, 
-  Plus, 
-  Wrench, 
-  Edit, 
-  Trash2, 
-  CheckCircle2, 
-  AlertCircle, 
-  Clock, 
-  TrendingUp,
-  PackageCheck,
+import {
+  Layers,
+  Plus,
+  Wrench,
+  Edit,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
   X,
-  AlertTriangle
+  AlertTriangle,
 } from 'lucide-react';
 import { InstallationTemplate, Product } from '../types';
 import { formatCurrency } from '../utils/formatters';
@@ -24,6 +22,17 @@ interface TemplatesViewProps {
   onDeleteTemplate: (templateId: string) => void;
   onExecuteTemplate: (template: InstallationTemplate) => void;
 }
+
+// Helper a prueba de datos corruptos: convierte cualquier valor a número seguro.
+// Evita que aparezca "NaN" si en el .json hay strings, nulls o undefined.
+const safeNumber = (v: unknown): number => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+};
 
 export const TemplatesView: React.FC<TemplatesViewProps> = ({
   templates,
@@ -44,6 +53,18 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
     if (filterCategory === 'ALL') return true;
     return (t.categoria || 'Autoconsumo Fotovoltaico') === filterCategory;
   });
+
+  // PVP total de una plantilla, calculado con protección contra datos corruptos
+  const computeTemplatePVP = (template: InstallationTemplate): number => {
+    if (!template?.items?.length) return 0;
+    return template.items.reduce((sum, item) => {
+      const p = products.find((pr) => pr.id === item.productoId);
+      if (!p) return sum;
+      const precio = safeNumber(p.precioVenta);
+      const cant = safeNumber(item.cantidad);
+      return sum + precio * cant;
+    }, 0);
+  };
 
   return (
     <div className="space-y-4">
@@ -67,7 +88,9 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
           >
             <option value="ALL">Todas las categorías</option>
             {categories.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
 
@@ -88,7 +111,8 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
           <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h4 className="text-base font-bold text-slate-700">No hay plantillas de instalación</h4>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            Crea tu primera plantilla configurable (ejemplo: &quot;Instalación inversor 10kW&quot; con inversores, paneles y cable).
+            Crea tu primera plantilla configurable (ejemplo: &quot;Instalación inversor 10kW&quot;
+            con inversores, paneles y cable).
           </p>
           <button
             onClick={onCreateTemplate}
@@ -101,7 +125,6 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredTemplates.map((template) => {
-            // Compute financial totals & maximum available installations
             let costoMateriales = 0;
             let valorVenta = 0;
             let maxInstallationsPossible = Infinity;
@@ -109,36 +132,36 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
 
             const componentsDetail = template.items.map((item) => {
               const product = products.find((p) => p.id === item.productoId);
-              const stock = product ? product.stockActual : 0;
-              const subCosto = product ? item.cantidad * product.precioCompra : 0;
-              const subVenta = product ? item.cantidad * product.precioVenta : 0;
+              const stock = product ? safeNumber(product.stockActual) : 0;
+              const precioCompra = product ? safeNumber(product.precioCompra) : 0;
+              const precioVenta = product ? safeNumber(product.precioVenta) : 0;
+              const cantidad = safeNumber(item.cantidad);
+
+              const subCosto = cantidad * precioCompra;
+              const subVenta = cantidad * precioVenta;
 
               costoMateriales += subCosto;
               valorVenta += subVenta;
 
-              if (item.cantidad > 0) {
-                const possible = Math.floor(stock / item.cantidad);
-                if (possible < maxInstallationsPossible) {
-                  maxInstallationsPossible = possible;
-                }
-                if (stock < item.cantidad) {
-                  missingStockCount++;
-                }
+              if (cantidad > 0) {
+                const possible = Math.floor(stock / cantidad);
+                if (possible < maxInstallationsPossible) maxInstallationsPossible = possible;
+                if (stock < cantidad) missingStockCount++;
               }
 
               return {
                 ...item,
+                cantidad,
                 product,
                 stock,
                 subCosto,
                 subVenta,
-                hasEnough: stock >= item.cantidad,
+                hasEnough: stock >= cantidad,
               };
             });
 
             if (maxInstallationsPossible === Infinity) maxInstallationsPossible = 0;
             const gananciaEstimada = valorVenta - costoMateriales;
-            const margenPct = valorVenta > 0 ? Math.round((gananciaEstimada / valorVenta) * 100) : 0;
 
             return (
               <div
@@ -180,7 +203,6 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Badges row */}
                   <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
                     {template.tiempoEstimadoHoras && (
                       <span className="inline-flex items-center gap-1 text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
@@ -192,12 +214,14 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
                     {missingStockCount === 0 ? (
                       <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-semibold">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        Stock para {maxInstallationsPossible} {maxInstallationsPossible === 1 ? 'instalación' : 'instalaciones'}
+                        Stock para {maxInstallationsPossible}{' '}
+                        {maxInstallationsPossible === 1 ? 'instalación' : 'instalaciones'}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-semibold">
                         <AlertCircle className="w-3.5 h-3.5" />
-                        Falta stock en {missingStockCount} {missingStockCount === 1 ? 'material' : 'materiales'}
+                        Falta stock en {missingStockCount}{' '}
+                        {missingStockCount === 1 ? 'material' : 'materiales'}
                       </span>
                     )}
                   </div>
@@ -217,7 +241,11 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
                         className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${item.hasEnough ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              item.hasEnough ? 'bg-emerald-500' : 'bg-amber-500'
+                            }`}
+                          />
                           <span className="font-semibold text-slate-800 truncate">
                             {item.product?.nombre || 'Producto desconocido'}
                           </span>
@@ -226,9 +254,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
                           <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
                             {item.cantidad} {item.product?.unidadMedida || 'ud'}
                           </span>
-                          <span className="text-[11px] text-slate-400">
-                            (Stock: {item.stock})
-                          </span>
+                          <span className="text-[11px] text-slate-400">(Stock: {item.stock})</span>
                         </div>
                       </li>
                     ))}
@@ -251,7 +277,9 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
                       </span>
                     </div>
                     <div className="border-l border-slate-200 pl-3">
-                      <span className="text-emerald-700 block text-[11px] font-bold">Ganancia Neta:</span>
+                      <span className="text-emerald-700 block text-[11px] font-bold">
+                        Ganancia Neta:
+                      </span>
                       <span className="font-black text-emerald-700 font-mono text-sm">
                         +{formatCurrency(gananciaEstimada)}
                       </span>
@@ -296,12 +324,14 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({
 
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1">
                 <p className="text-sm font-bold text-slate-900">{templateToDelete.nombre}</p>
-                <p className="text-xs text-slate-500">Categoría: {templateToDelete.categoria}</p>
+                <p className="text-xs text-slate-500">
+                  Categoría: {templateToDelete.categoria || 'Autoconsumo'}
+                </p>
                 <p className="text-xs text-slate-500">
                   {templateToDelete.items.length} productos configurados en el kit
                 </p>
                 <p className="text-xs font-semibold text-slate-700">
-                  PVP: {formatCurrency(templateToDelete.precioVentaTotal)}
+                  PVP: {formatCurrency(computeTemplatePVP(templateToDelete))}
                 </p>
               </div>
 

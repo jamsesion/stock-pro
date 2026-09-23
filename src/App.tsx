@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { Navbar } from './components/Navbar';
 import { StockAlertsBanner } from './components/StockAlertsBanner';
 import { DatabasePromptBanner } from './components/DatabasePromptBanner';
@@ -21,101 +21,114 @@ import { ExecuteInstallationModal } from './components/ExecuteInstallationModal'
 
 import { ActiveTab, InstallationTemplate, Product } from './types';
 import { dbService } from './services/db';
-import { pickDatabaseFile, downloadDatabaseBlob } from './utils/fileDatabase';
-import { CheckCircle, AlertCircle, Download, FileText, Save, AlertTriangle } from 'lucide-react';
+import { pickDatabaseFile } from './utils/fileDatabase';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('products');
 
-  // Reactively subscribe to dbService changes
-  const [dbTick, setDbTick] = useState(0);
-  useEffect(() => {
-    const unsubscribe = dbService.subscribe(() => {
-      setDbTick((t) => t + 1);
-    });
-    return unsubscribe;
-  }, []);
+  // Suscripción eficiente a la base de datos
+  const subscribe = useMemo(() => dbService.subscribe, []);
 
-  // Restaurar automáticamente la base de datos en uso si se reabre la aplicación o APK
-  useEffect(() => {
-    dbService.initFromStorage();
-  }, []);
+  const isDbLoaded = useSyncExternalStore(subscribe, dbService.isLoadedSnapshot, () => false);
+  const dbFileName = useSyncExternalStore(subscribe, dbService.getDatabaseFileNameSnapshot, () => null);
+  const saveStatus = useSyncExternalStore(subscribe, dbService.getSaveStatusSnapshot, () => 'idle' as const);
+  const hasUnsavedChanges = useSyncExternalStore(subscribe, dbService.hasUnsavedChangesSnapshot, () => false);
+  const products = useSyncExternalStore(subscribe, dbService.getProductsSnapshot, () => []);
+  const templates = useSyncExternalStore(subscribe, dbService.getTemplatesSnapshot, () => []);
+  const movements = useSyncExternalStore(subscribe, dbService.getMovementsSnapshot, () => []);
 
-  // Synchronized data from DB
-  const isDbLoaded = useMemo(() => dbService.isLoaded(), [dbTick]);
-  const dbFileName = useMemo(() => dbService.getDatabaseFileName(), [dbTick]);
-  const saveStatus = useMemo(() => dbService.getSaveStatus(), [dbTick]);
-  const hasWritable = useMemo(() => dbService.hasWritableHandle(), [dbTick]);
-  const hasUnsavedChanges = useMemo(() => dbService.hasUnsavedChanges(), [dbTick]);
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((p) => p.categoria))).filter(Boolean),
+    [products]
+  );
 
-  const products = useMemo(() => dbService.getProducts(), [dbTick]);
-  const templates = useMemo(() => dbService.getTemplates(), [dbTick]);
-  const movements = useMemo(() => dbService.getMovements(), [dbTick]);
-
-  // Derived categories
-  const categories = useMemo(() => {
-    return Array.from(new Set(products.map((p) => p.categoria))).filter(Boolean);
-  }, [products]);
-
-  // File input fallback ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Modals state
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
   const [isUnsavedPromptOpen, setIsUnsavedPromptOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<InstallationTemplate | null>(null);
-
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [selectedProductForStock, setSelectedProductForStock] = useState<Product | null>(null);
-
   const [isExecuteModalOpen, setIsExecuteModalOpen] = useState(false);
   const [selectedTemplateIdForExecution, setSelectedTemplateIdForExecution] = useState<string | undefined>(undefined);
 
-  // Toast feedback
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  const toastTimer = useRef<number | null>(null);
 
   const showToast = (text: string, type: 'success' | 'info' | 'warning' = 'success') => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
     setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
+    toastTimer.current = window.setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // Interceptar cierre de pestaña/navegador/APK si hay modificaciones sin guardar
+  // Inicialización (NO carga datos demo si no hay nada)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await dbService.initFromStorage();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Aviso al cerrar la pestaña si hay cambios sin guardar en el archivo
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (dbService.hasUnsavedChanges()) {
         e.preventDefault();
-        // Mensaje estándar para el cuadro de diálogo nativo del navegador/APK
-        e.returnValue = 'Tienes cambios sin guardar en la base de datos actual. ¿Deseas salir sin guardar la última modificación?';
-        return e.returnValue;
+        e.returnValue = '';
+        return '';
       }
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // Database operations
+  // NUEVO: Auto-guardado al minimizar o cambiar de pestaña.
+  // Así, si el usuario minimiza el navegador con cambios pendientes,
+  // intentamos persistir en el archivo real sin que tenga que pulsar Guardar.
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'hidden' && dbService.hasUnsavedChanges()) {
+        try {
+          const res = await dbService.saveCurrentDatabase();
+          // Silencioso: no mostramos toast porque el usuario no está mirando
+          if (res.success && res.method === 'direct') {
+            console.info('[App] Auto-guardado al ocultar pestaña: OK');
+          }
+        } catch (e) {
+          console.warn('[App] Auto-guardado al ocultar pestaña falló:', e);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // ==========================================================================
+  //  OPERACIONES DE BASE DE DATOS
+  // ==========================================================================
+
   const handleSelectDatabaseFile = async () => {
     try {
       const result = await pickDatabaseFile(fileInputRef.current);
-      if (result) {
-        const loadResult = await dbService.loadFromFile(result.file, result.handle);
-        if (loadResult.success) {
-          showToast(
-            `Base de datos "${result.file.name}" cargada correctamente (${loadResult.stats?.products || 0} productos)`,
-            'success'
-          );
-        } else {
-          showToast(loadResult.message || 'Error al leer el archivo seleccionado', 'warning');
-        }
+      if (!result) return;
+      const loadResult = await dbService.loadFromFile(result.file, result.handle);
+      if (loadResult.success) {
+        showToast(
+          `Base de datos "${result.file.name}" cargada (${loadResult.stats?.products || 0} productos, ${loadResult.stats?.movements || 0} movimientos)`,
+          'success'
+        );
+      } else {
+        showToast(loadResult.message || 'Error al leer el archivo', 'warning');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error al seleccionar base de datos', err);
       showToast('No se pudo acceder al archivo seleccionado', 'warning');
     }
@@ -123,95 +136,108 @@ export default function App() {
 
   const handleFallbackFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const loadResult = await dbService.loadFromFile(file, null);
-      if (loadResult.success) {
-        showToast(
-          `Base de datos "${file.name}" cargada (${loadResult.stats?.products || 0} productos)`,
-          'success'
-        );
-      } else {
-        showToast(loadResult.message || 'Error al leer el archivo', 'warning');
-      }
-      e.target.value = '';
+    if (!file) return;
+    const loadResult = await dbService.loadFromFile(file, null);
+    if (loadResult.success) {
+      showToast(`Base de datos "${file.name}" cargada (${loadResult.stats?.products || 0} productos)`, 'success');
+    } else {
+      showToast(loadResult.message || 'Error al leer el archivo', 'warning');
     }
+    e.target.value = '';
   };
 
-  const handleCreateSampleDatabase = async () => {
-    await dbService.createNewDatabase('inventario_solar.json', true, null);
-    showToast('Base de datos de demostración cargada con materiales solares y movimientos', 'success');
-  };
-
-  // UN SOLO BOTÓN: Guardar datos en la base de datos actual que esté utilizando
   const handleSaveCurrentDatabase = async () => {
     try {
       const res = await dbService.saveCurrentDatabase();
-      if (res.success) {
+      if (res.success && res.method === 'direct') {
         showToast(res.message, 'success');
+      } else if (res.success && res.method === 'internal') {
+        showToast(res.message, 'info');
       } else {
-        showToast(res.message || 'Error al guardar la base de datos', 'warning');
+        showToast(res.message, 'warning');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error al guardar base de datos', err);
       showToast('Error al guardar datos en el archivo', 'warning');
     }
   };
 
-  // Solicitud de cierre de sesión / APK
   const handleRequestCloseApp = () => {
     if (dbService.hasUnsavedChanges()) {
       setIsUnsavedPromptOpen(true);
     } else {
-      showToast('Todos los cambios están guardados de forma segura.', 'success');
+      showToast('Todos los cambios están guardados.', 'success');
     }
   };
 
-  // Product CRUD
-  const handleSaveProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+  // ==========================================================================
+  //  PRODUCTS
+  // ==========================================================================
+
+  const handleSaveProduct = (
+    productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+  ) => {
     dbService.saveProduct(productData);
-    showToast(productData.id ? 'Producto actualizado en el inventario' : 'Producto añadido al inventario', 'success');
+    showToast(productData.id ? 'Producto actualizado' : 'Producto añadido al inventario', 'success');
   };
 
   const handleDeleteProduct = (productId: string) => {
-    const ok = dbService.deleteProduct(productId);
-    if (ok) {
+    if (dbService.deleteProduct(productId)) {
       showToast('Producto eliminado del catálogo', 'info');
     }
   };
 
-  // Template CRUD
-  const handleSaveTemplate = (templateData: Omit<InstallationTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+  // ==========================================================================
+  //  TEMPLATES
+  // ==========================================================================
+
+  const handleSaveTemplate = (
+    templateData: Omit<InstallationTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+  ) => {
     dbService.saveTemplate(templateData);
-    showToast(templateData.id ? 'Plantilla actualizada' : 'Nueva plantilla de instalación creada', 'success');
+    showToast(templateData.id ? 'Plantilla actualizada' : 'Nueva plantilla creada', 'success');
   };
 
   const handleDeleteTemplate = (templateId: string) => {
-    const ok = dbService.deleteTemplate(templateId);
-    if (ok) {
-      showToast('Plantilla de instalación eliminada', 'info');
+    if (dbService.deleteTemplate(templateId)) {
+      showToast('Plantilla eliminada', 'info');
     }
   };
 
-  // Execute Installation
+  // ==========================================================================
+  //  INSTALACIONES
+  // ==========================================================================
+
   const handleConfirmInstallation = (params: {
     plantillaId?: string;
     plantillaNombre?: string;
     motivo: string;
     cliente?: string;
+    clienteCI?: string;
+    clienteDireccion?: string;
     numeroFactura?: string;
+    formaPago?: string;
     items: { productoId: string; cantidad: number }[];
+    serviciosExtra?: any[];
+    descuento?: number;
     observaciones?: string;
   }) => {
     const result = dbService.executeInstallation(params);
     if (result.success && result.movement) {
-      const facturaTag = result.movement.numeroFactura ? ` [${result.movement.numeroFactura}]` : '';
-      showToast(`¡Instalación registrada${facturaTag}! Stock descontado (+${result.movement.gananciaTotal.toFixed(2)} €)`, 'success');
+      const tag = result.movement.numeroFactura ? ` [${result.movement.numeroFactura}]` : '';
+      showToast(
+        `Instalación registrada${tag}. Stock descontado (+${result.movement.gananciaTotal.toFixed(2)} USD)`,
+        'success'
+      );
     } else {
       showToast(result.error || 'Error al ejecutar la instalación', 'warning');
     }
   };
 
-  // Stock Entry (Recepción)
+  // ==========================================================================
+  //  STOCK
+  // ==========================================================================
+
   const handleConfirmStockEntry = (params: {
     productoId: string;
     cantidad: number;
@@ -222,24 +248,26 @@ export default function App() {
   }) => {
     const result = dbService.registerStockEntry(params);
     if (result.success) {
-      showToast('Entrada de stock registrada correctamente', 'success');
+      showToast('Entrada de stock registrada', 'success');
     } else {
       showToast(result.error || 'Error al registrar entrada', 'warning');
     }
   };
 
-  // Delete Stock Movement / Old Installation
+  // ==========================================================================
+  //  MOVIMIENTOS
+  // ==========================================================================
+
   const handleDeleteMovement = (movementId: string, revertStock: boolean) => {
-    const ok = dbService.deleteMovement(movementId, revertStock);
-    if (ok) {
+    if (dbService.deleteMovement(movementId, revertStock)) {
       showToast(
         revertStock
-          ? 'Registro eliminado y stock de productos restaurado'
-          : 'Registro eliminado del historial de movimientos',
+          ? 'Registro eliminado y stock restaurado'
+          : 'Registro eliminado del historial',
         'info'
       );
     } else {
-      showToast('No se pudo encontrar el registro a eliminar', 'warning');
+      showToast('No se encontró el registro', 'warning');
     }
   };
 
@@ -247,13 +275,16 @@ export default function App() {
     const count = dbService.deleteMultipleMovements(movementIds, revertStock);
     if (count > 0) {
       showToast(
-        `Se eliminaron ${count} registro(s) del historial${revertStock ? ' (stock restaurado)' : ''}`,
+        `Se eliminaron ${count} registro(s)${revertStock ? ' (stock restaurado)' : ''}`,
         'info'
       );
     }
   };
 
-  // Quick Open Handlers
+  // ==========================================================================
+  //  ABRIR MODALES
+  // ==========================================================================
+
   const openNewProduct = () => {
     setEditingProduct(null);
     setIsProductModalOpen(true);
@@ -281,7 +312,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 pb-12 sm:pb-8">
-      {/* Hidden File Input for standard file picker fallback */}
       <input
         type="file"
         ref={fileInputRef}
@@ -290,14 +320,17 @@ export default function App() {
         onChange={handleFallbackFileInputChange}
       />
 
-      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 animate-bounce shadow-xl">
-          <div className={`px-4 py-3 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 border ${
-            toastMessage.type === 'success' ? 'bg-emerald-900 text-emerald-100 border-emerald-700' :
-            toastMessage.type === 'warning' ? 'bg-amber-900 text-amber-100 border-amber-700' :
-            'bg-slate-900 text-slate-100 border-slate-700'
-          }`}>
+        <div className="fixed bottom-4 right-4 z-50 shadow-xl">
+          <div
+            className={`px-4 py-3 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 border ${
+              toastMessage.type === 'success'
+                ? 'bg-emerald-900 text-emerald-100 border-emerald-700'
+                : toastMessage.type === 'warning'
+                ? 'bg-amber-900 text-amber-100 border-amber-700'
+                : 'bg-slate-900 text-slate-100 border-slate-700'
+            }`}
+          >
             {toastMessage.type === 'warning' ? (
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
             ) : (
@@ -308,7 +341,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Navbar with Single Save Button and DB Selection */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -325,18 +357,15 @@ export default function App() {
         onRequestCloseApp={handleRequestCloseApp}
       />
 
-      {/* Main Content Area */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4 flex-1">
-        {/* Banner shown when NO database file is currently loaded */}
         {!isDbLoaded && (
           <DatabasePromptBanner
             onSelectExisting={handleSelectDatabaseFile}
             onOpenModal={() => setIsDatabaseModalOpen(true)}
-            onCreateSample={handleCreateSampleDatabase}
+            onCreateSample={() => setIsDatabaseModalOpen(true)}
           />
         )}
 
-        {/* Stock Alerts Banner (displayed only when not on alerts tab and when DB is loaded) */}
         {isDbLoaded && activeTab !== 'alerts' && (
           <StockAlertsBanner
             products={products}
@@ -345,7 +374,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab Views */}
         {activeTab === 'products' && (
           <ProductsView
             products={products}
@@ -384,12 +412,11 @@ export default function App() {
             onExecuteInstallation={() => openExecuteInstallation()}
             onDeleteMovement={handleDeleteMovement}
             onDeleteMultipleMovements={handleDeleteMultipleMovements}
+            onShowToast={showToast}
           />
         )}
 
-        {activeTab === 'profit' && (
-          <ProfitDashboardView movements={movements} />
-        )}
+        {activeTab === 'profit' && <ProfitDashboardView movements={movements} />}
 
         {activeTab === 'alerts' && (
           <StockAlertsView
@@ -400,7 +427,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Database Modal */}
       <DatabaseModal
         isOpen={isDatabaseModalOpen}
         onClose={() => setIsDatabaseModalOpen(false)}
@@ -408,7 +434,6 @@ export default function App() {
         onShowToast={showToast}
       />
 
-      {/* Unsaved Changes Confirmation Modal before exiting/closing */}
       <UnsavedChangesPromptModal
         isOpen={isUnsavedPromptOpen}
         fileName={dbFileName || 'inventario'}
@@ -416,15 +441,13 @@ export default function App() {
         onSaveAndConfirm={async () => {
           await handleSaveCurrentDatabase();
           setIsUnsavedPromptOpen(false);
-          showToast('Cambios guardados con éxito en la aplicación.', 'success');
         }}
         onDiscardAndConfirm={() => {
           setIsUnsavedPromptOpen(false);
-          showToast('Ventana cerrada.', 'info');
+          showToast('Cambios descartados', 'info');
         }}
       />
 
-      {/* Other Modals */}
       <ProductFormModal
         isOpen={isProductModalOpen}
         onClose={() => {
@@ -434,6 +457,7 @@ export default function App() {
         onSave={handleSaveProduct}
         initialProduct={editingProduct}
         categories={categories}
+        allProducts={products}
       />
 
       <TemplateFormModal
@@ -445,6 +469,7 @@ export default function App() {
         onSave={handleSaveTemplate}
         initialTemplate={editingTemplate}
         products={products}
+        allTemplates={templates}
       />
 
       <StockAdjustmentModal
@@ -464,7 +489,7 @@ export default function App() {
             items: [{ productoId: params.productoId, cantidad: params.cantidad }],
             observaciones: params.observaciones,
           });
-          showToast('Salida de stock registrada en el historial', 'info');
+          showToast('Salida de stock registrada', 'info');
         }}
       />
 

@@ -1,7 +1,12 @@
-import { InstallationTemplate, Product, StockMovement, StockMovementItem } from '../types';
 import {
-  verifyPermission,
-} from '../utils/fileDatabase';
+  InstallationTemplate,
+  Product,
+  StockMovement,
+  StockMovementItem,
+  ExtraService,
+  CompanyInfo,
+} from '../types';
+import { verifyPermission } from '../utils/fileDatabase';
 import {
   saveActiveDatabaseToIndexedDb,
   loadActiveDatabaseFromIndexedDb,
@@ -16,295 +21,20 @@ export interface DatabaseSchema {
   updatedAt: string;
   dbPath?: string;
   invoiceConsecutive?: number;
+  empresa?: CompanyInfo;
   products: Product[];
   templates: InstallationTemplate[];
   movements: StockMovement[];
 }
 
-export const SAMPLE_PRODUCTS: Product[] = [
-  {
-    id: 'prod-1',
-    nombre: 'Inversor 10kW Híbrido Deye',
-    categoria: 'Inversores',
-    stockActual: 4,
-    stockMinimo: 2,
-    precioCompra: 1450,
-    precioVenta: 2150,
-    proveedor: 'Deye Ibérica Distribuciones',
-    fechaEntrada: '2026-08-25',
-    unidadMedida: 'ud',
-    ubicacion: 'Nave A - Pasillo 2',
-    notas: 'Garantía 10 años. Apto para baterías de baja tensión.',
-    createdAt: '2026-08-25T08:00:00.000Z',
-    updatedAt: '2026-08-25T08:00:00.000Z',
-  },
-  {
-    id: 'prod-2',
-    nombre: 'Panel solar 450W Monocristalino Tier-1',
-    categoria: 'Paneles Solares',
-    stockActual: 62,
-    stockMinimo: 25,
-    precioCompra: 85,
-    precioVenta: 135,
-    proveedor: 'SolarTech Global',
-    fechaEntrada: '2026-09-01',
-    unidadMedida: 'ud',
-    ubicacion: 'Nave B - Estantería 1',
-    notas: 'Módulos bifaciales alta eficiencia 21.5%',
-    createdAt: '2026-09-01T09:30:00.000Z',
-    updatedAt: '2026-09-01T09:30:00.000Z',
-  },
-  {
-    id: 'prod-3',
-    nombre: 'Cable solar 6mm² Rojo/Negro',
-    categoria: 'Cableado y Conexión',
-    stockActual: 240,
-    stockMinimo: 100,
-    precioCompra: 0.95,
-    precioVenta: 1.90,
-    proveedor: 'CableSur Industrial',
-    fechaEntrada: '2026-09-02',
-    unidadMedida: 'metros',
-    ubicacion: 'Nave A - Bobinas',
-    notas: 'Bobinas homologadas para intemperie UV',
-    createdAt: '2026-09-02T10:15:00.000Z',
-    updatedAt: '2026-09-02T10:15:00.000Z',
-  },
-  {
-    id: 'prod-4',
-    nombre: 'Batería Litio 5.12kWh 48V',
-    categoria: 'Baterías',
-    stockActual: 3,
-    stockMinimo: 2,
-    precioCompra: 1220,
-    precioVenta: 1780,
-    proveedor: 'Pylontech España',
-    fechaEntrada: '2026-09-05',
-    unidadMedida: 'ud',
-    ubicacion: 'Nave A - Zona Segura',
-    notas: 'Batería LiFePO4 6000 ciclos',
-    createdAt: '2026-09-05T11:00:00.000Z',
-    updatedAt: '2026-09-05T11:00:00.000Z',
-  },
-  {
-    id: 'prod-5',
-    nombre: 'Conectores MC4 Par (Macho + Hembra)',
-    categoria: 'Cableado y Conexión',
-    stockActual: 14,
-    stockMinimo: 40,
-    precioCompra: 0.70,
-    precioVenta: 2.20,
-    proveedor: 'CableSur Industrial',
-    fechaEntrada: '2026-08-20',
-    unidadMedida: 'ud',
-    ubicacion: 'Cajonera C-12',
-    notas: 'Alerta de stock bajo: reponer pedido',
-    createdAt: '2026-08-20T08:00:00.000Z',
-    updatedAt: '2026-08-20T08:00:00.000Z',
-  },
-  {
-    id: 'prod-6',
-    nombre: 'Estructura Coplanar Aluminio 4 paneles',
-    categoria: 'Estructuras',
-    stockActual: 3,
-    stockMinimo: 6,
-    precioCompra: 72,
-    precioVenta: 130,
-    proveedor: 'AlumSolar Perfiles',
-    fechaEntrada: '2026-08-28',
-    unidadMedida: 'ud',
-    ubicacion: 'Nave B - Zona Estructuras',
-    notas: 'Perfiles triangulares aluminio anodizado',
-    createdAt: '2026-08-28T09:00:00.000Z',
-    updatedAt: '2026-08-28T09:00:00.000Z',
-  },
-  {
-    id: 'prod-7',
-    nombre: 'Cuadro de Protecciones AC/DC 600V',
-    categoria: 'Protecciones Eléctricas',
-    stockActual: 7,
-    stockMinimo: 4,
-    precioCompra: 110,
-    precioVenta: 195,
-    proveedor: 'ElectroProtec Industrial',
-    fechaEntrada: '2026-09-03',
-    unidadMedida: 'ud',
-    ubicacion: 'Nave A - Pasillo 3',
-    notas: 'Incluye sobretensiones transitorias y magnetotérmico 32A',
-    createdAt: '2026-09-03T11:45:00.000Z',
-    updatedAt: '2026-09-03T11:45:00.000Z',
-  },
-  {
-    id: 'prod-8',
-    nombre: 'Vatímetro Smart Meter Chint DDSU666',
-    categoria: 'Monitorización',
-    stockActual: 5,
-    stockMinimo: 3,
-    precioCompra: 85,
-    precioVenta: 160,
-    proveedor: 'Deye Ibérica Distribuciones',
-    fechaEntrada: '2026-08-29',
-    unidadMedida: 'ud',
-    ubicacion: 'Cajonera M-04',
-    notas: 'Medidor monofásico para inyección cero y monitorización',
-    createdAt: '2026-08-29T10:00:00.000Z',
-    updatedAt: '2026-08-29T10:00:00.000Z',
-  },
-];
+const DEFAULT_COMPANY: CompanyInfo = {
+  nombre: 'Danos Electrical',
+  telefono: '+53 58101968',
+  cif: '',
+  direccion: '',
+  email: '',
+};
 
-export const SAMPLE_TEMPLATES: InstallationTemplate[] = [
-  {
-    id: 'tpl-1',
-    nombre: 'Instalación inversor 10kW',
-    descripcion: 'Kit estándar para instalación de autoconsumo residencial con inversor 10kW y 20 paneles',
-    categoria: 'Autoconsumo Residencial',
-    tiempoEstimadoHoras: 8,
-    precioVentaPersonalizado: 5970,
-    items: [
-      { productoId: 'prod-1', cantidad: 1 },
-      { productoId: 'prod-2', cantidad: 20 },
-      { productoId: 'prod-3', cantidad: 50 },
-      { productoId: 'prod-5', cantidad: 10 },
-      { productoId: 'prod-6', cantidad: 5 },
-      { productoId: 'prod-7', cantidad: 1 },
-      { productoId: 'prod-8', cantidad: 1 },
-    ],
-    createdAt: '2026-08-20T10:00:00.000Z',
-    updatedAt: '2026-08-20T10:00:00.000Z',
-  },
-  {
-    id: 'tpl-2',
-    nombre: 'Ampliación Batería Litio 5kWh',
-    descripcion: 'Incorporación de acumulación en sistema existente con batería 5.12kWh y protecciones',
-    categoria: 'Acumulación y Baterías',
-    tiempoEstimadoHoras: 3,
-    precioVentaPersonalizado: 2250,
-    items: [
-      { productoId: 'prod-4', cantidad: 1 },
-      { productoId: 'prod-3', cantidad: 10 },
-      { productoId: 'prod-7', cantidad: 1 },
-    ],
-    createdAt: '2026-08-22T12:00:00.000Z',
-    updatedAt: '2026-08-22T12:00:00.000Z',
-  },
-];
-
-export const SAMPLE_MOVEMENTS: StockMovement[] = [
-  {
-    id: 'mov-1',
-    tipo: 'ENTRADA_STOCK',
-    fechaHora: '2026-09-01T09:30:00.000Z',
-    motivo: 'Recepción pedido paneles solares de proveedor',
-    items: [
-      {
-        productoId: 'prod-2',
-        productoNombre: 'Panel solar 450W Monocristalino Tier-1',
-        cantidad: 82,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 85,
-        precioVentaUnitario: 135,
-        stockAnterior: 0,
-        stockPosterior: 82,
-      },
-    ],
-    costoTotal: 82 * 85,
-    ingresoTotal: 82 * 85,
-    gananciaTotal: 0,
-    observaciones: 'Albarán de entrega ST-2026-904',
-  },
-  {
-    id: 'mov-2',
-    tipo: 'SALIDA_INSTALACION',
-    fechaHora: '2026-09-10T14:45:22.000Z',
-    motivo: 'Instalación cliente Pérez',
-    cliente: 'Juan Carlos Pérez - Finca El Roble',
-    numeroFactura: 'FAC-00001',
-    plantillaId: 'tpl-1',
-    plantillaNombre: 'Instalación inversor 10kW',
-    items: [
-      {
-        productoId: 'prod-1',
-        productoNombre: 'Inversor 10kW Híbrido Deye',
-        cantidad: 1,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 1450,
-        precioVentaUnitario: 2150,
-        stockAnterior: 5,
-        stockPosterior: 4,
-      },
-      {
-        productoId: 'prod-2',
-        productoNombre: 'Panel solar 450W Monocristalino Tier-1',
-        cantidad: 20,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 85,
-        precioVentaUnitario: 135,
-        stockAnterior: 82,
-        stockPosterior: 62,
-      },
-      {
-        productoId: 'prod-3',
-        productoNombre: 'Cable solar 6mm² Rojo/Negro',
-        cantidad: 50,
-        unidadMedida: 'metros',
-        precioCompraUnitario: 0.95,
-        precioVentaUnitario: 1.90,
-        stockAnterior: 290,
-        stockPosterior: 240,
-      },
-      {
-        productoId: 'prod-5',
-        productoNombre: 'Conectores MC4 Par (Macho + Hembra)',
-        cantidad: 10,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 0.70,
-        precioVentaUnitario: 2.20,
-        stockAnterior: 24,
-        stockPosterior: 14,
-      },
-      {
-        productoId: 'prod-6',
-        productoNombre: 'Estructura Coplanar Aluminio 4 paneles',
-        cantidad: 5,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 72,
-        precioVentaUnitario: 130,
-        stockAnterior: 8,
-        stockPosterior: 3,
-      },
-      {
-        productoId: 'prod-7',
-        productoNombre: 'Cuadro de Protecciones AC/DC 600V',
-        cantidad: 1,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 110,
-        precioVentaUnitario: 195,
-        stockAnterior: 8,
-        stockPosterior: 7,
-      },
-      {
-        productoId: 'prod-8',
-        productoNombre: 'Vatímetro Smart Meter Chint DDSU666',
-        cantidad: 1,
-        unidadMedida: 'ud',
-        precioCompraUnitario: 85,
-        precioVentaUnitario: 160,
-        stockAnterior: 6,
-        stockPosterior: 5,
-      },
-    ],
-    costoTotal: 1450 + (20 * 85) + (50 * 0.95) + (10 * 0.70) + (5 * 72) + 110 + 85,
-    ingresoTotal: 2150 + (20 * 135) + (50 * 1.90) + (10 * 2.20) + (5 * 130) + 195 + 160,
-    gananciaTotal: 5972 - 3759.5,
-    observaciones: 'Instalación finalizada con puesta en marcha y certificación técnica.',
-  },
-];
-
-/**
- * Gestor de Base de Datos Portátil Externa
- * NO depende de localStorage.
- * Los datos residen en el archivo externo elegido por el usuario (.db o .json).
- */
 class InventoryDatabase {
   private cache: DatabaseSchema = {
     version: 1,
@@ -312,206 +42,223 @@ class InventoryDatabase {
     updatedAt: new Date().toISOString(),
     dbPath: 'inventario.json',
     invoiceConsecutive: 1,
+    empresa: { ...DEFAULT_COMPANY },
     products: [],
     templates: [],
     movements: [],
   };
 
-  private isDatabaseLoaded: boolean = false;
-  // Variable de estado global y persistente para la ruta del archivo de base de datos
-  private dbPath: string = getStoredDbPath() || 'inventario.json';
+  private isDatabaseLoaded = false;
+  private dbPath: string = 'inventario.json';
   private databaseFileName: string | null = null;
-  private fileHandle: any | null = null;
+  private fileHandle: FileSystemFileHandle | null = null;
   private lastSavedAt: Date | null = null;
   private saveStatus: 'idle' | 'saving' | 'saved' | 'error' | 'pending_manual' = 'idle';
-  private hasUnsavedChangesFlag: boolean = false;
-  private listeners: Set<() => void> = new Set();
+  private hasUnsavedChangesFlag = false;
+  private listeners = new Set<() => void>();
+
+  private productsSnapshot: Product[] = [];
+  private templatesSnapshot: InstallationTemplate[] = [];
+  private movementsSnapshot: StockMovement[] = [];
+  private empresaSnapshot: CompanyInfo = { ...DEFAULT_COMPANY };
+  private loadedSnapshot = false;
+  private dbFileNameSnapshot: string | null = null;
+  private saveStatusSnapshot: 'idle' | 'saving' | 'saved' | 'error' | 'pending_manual' = 'idle';
+  private hasUnsavedSnapshot = false;
+  private hasWritableSnapshot = false;
+
+  private persistDebounceTimer: number | null = null;
+  private persistDebounceMs = 150;
+
+  private isSaving = false;
+  private pendingSaveResolvers: Array<(value: any) => void> = [];
+  private pendingSaveNeeded = false;
 
   constructor() {
-    // Starts with no database loaded until user selects or creates their portable file.
+    this.dbPath = getStoredDbPath() || 'inventario.json';
   }
 
-  public subscribe(callback: () => void): () => void {
+  // ==========================================================================
+  //  SUSCRIPCIÓN
+  // ==========================================================================
+
+  public subscribe = (callback: () => void): (() => void) => {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
-  }
+  };
 
   private notifyListeners(): void {
-    this.listeners.forEach((listener) => {
+    this.productsSnapshot = [...this.cache.products];
+    this.templatesSnapshot = [...this.cache.templates];
+    this.movementsSnapshot = [...this.cache.movements].sort(
+      (a, b) => new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime()
+    );
+    this.empresaSnapshot = this.cache.empresa ? { ...this.cache.empresa } : { ...DEFAULT_COMPANY };
+    this.loadedSnapshot = this.isDatabaseLoaded;
+    this.dbFileNameSnapshot = this.databaseFileName;
+    this.saveStatusSnapshot = this.saveStatus;
+    this.hasUnsavedSnapshot = this.hasUnsavedChangesFlag;
+    this.hasWritableSnapshot = this.fileHandle !== null;
+
+    this.listeners.forEach((l) => {
       try {
-        listener();
+        l();
       } catch (e) {
-        console.error('Error in database listener', e);
+        console.error('[db] Listener error', e);
       }
     });
   }
 
-  // --- Portable File State Getters & Setters ---
-  public isLoaded(): boolean {
-    return this.isDatabaseLoaded;
-  }
+  public getProductsSnapshot = (): Product[] => this.productsSnapshot;
+  public getTemplatesSnapshot = (): InstallationTemplate[] => this.templatesSnapshot;
+  public getMovementsSnapshot = (): StockMovement[] => this.movementsSnapshot;
+  public getEmpresaSnapshot = (): CompanyInfo => this.empresaSnapshot;
+  public isLoadedSnapshot = (): boolean => this.loadedSnapshot;
+  public getDatabaseFileNameSnapshot = (): string | null => this.dbFileNameSnapshot;
+  public getSaveStatusSnapshot = (): typeof this.saveStatusSnapshot => this.saveStatusSnapshot;
+  public hasUnsavedChangesSnapshot = (): boolean => this.hasUnsavedSnapshot;
+  public hasWritableSnapshotFn = (): boolean => this.hasWritableSnapshot;
 
-  public getDbPath(): string {
-    return this.dbPath || getStoredDbPath() || this.databaseFileName || 'inventario.json';
-  }
+  // ==========================================================================
+  //  GETTERS CLÁSICOS
+  // ==========================================================================
 
-  public setDbPath(path: string): void {
-    const clean = path.trim();
-    if (!clean) return;
-    this.dbPath = clean;
-    this.databaseFileName = clean;
-    this.cache.dbPath = clean;
-    setStoredDbPath(clean);
-    this.notifyListeners();
-  }
+  public isLoaded = (): boolean => this.isDatabaseLoaded;
+  public getDatabaseFileName = (): string | null => this.databaseFileName;
+  public getDbPath = (): string => this.dbPath || 'inventario.json';
+  public getSaveStatus = () => this.saveStatus;
+  public hasUnsavedChanges = (): boolean => this.hasUnsavedChangesFlag;
+  public hasWritableHandle = (): boolean => this.fileHandle !== null;
+  public getFileHandle = (): FileSystemFileHandle | null => this.fileHandle;
+  public getLastSavedAt = (): Date | null => this.lastSavedAt;
+  public getProducts = (): Product[] => [...this.cache.products];
+  public getTemplates = (): InstallationTemplate[] => [...this.cache.templates];
+  public getMovements = (): StockMovement[] =>
+    [...this.cache.movements].sort(
+      (a, b) => new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime()
+    );
 
-  public getDatabaseFileName(): string | null {
-    return this.dbPath || this.databaseFileName;
-  }
+  public getEmpresa = (): CompanyInfo =>
+    this.cache.empresa ? { ...this.cache.empresa } : { ...DEFAULT_COMPANY };
 
-  public getInvoiceConsecutive(): number {
-    return typeof this.cache.invoiceConsecutive === 'number' && this.cache.invoiceConsecutive > 0
-      ? this.cache.invoiceConsecutive
-      : 1;
-  }
-
-  public setInvoiceConsecutive(num: number): void {
-    const valid = Math.max(1, Math.floor(num));
-    this.cache.invoiceConsecutive = valid;
+  public setEmpresa = (empresa: Partial<CompanyInfo>): void => {
+    this.cache.empresa = {
+      ...DEFAULT_COMPANY,
+      ...this.cache.empresa,
+      ...empresa,
+    };
     this.persist({ ...this.cache });
-    this.notifyListeners();
-  }
+  };
 
-  public getNextInvoiceNumber(): string {
-    const num = this.getInvoiceConsecutive();
-    return `FAC-${String(num).padStart(5, '0')}`;
-  }
+  public getProductById = (id: string): Product | undefined =>
+    this.cache.products.find((p) => p.id === id);
+  public getTemplateById = (id: string): InstallationTemplate | undefined =>
+    this.cache.templates.find((t) => t.id === id);
 
-  public consumeNextInvoiceNumber(): string {
-    const currentNum = this.getInvoiceConsecutive();
-    const formatted = `FAC-${String(currentNum).padStart(5, '0')}`;
-    this.cache.invoiceConsecutive = currentNum + 1;
-    this.persist({ ...this.cache });
-    return formatted;
-  }
+  public getInvoiceConsecutive = (): number => {
+    const n = this.cache.invoiceConsecutive;
+    return typeof n === 'number' && n > 0 ? n : 1;
+  };
 
-  public getLastSavedAt(): Date | null {
-    return this.lastSavedAt;
-  }
+  public getNextInvoiceNumber = (): string => {
+    return `FAC-${String(this.getInvoiceConsecutive()).padStart(5, '0')}`;
+  };
 
-  public getSaveStatus(): 'idle' | 'saving' | 'saved' | 'error' | 'pending_manual' {
-    return this.saveStatus;
-  }
+  public setInvoiceConsecutive = (num: number): void => {
+    this.cache.invoiceConsecutive = Math.max(1, Math.floor(num));
+    this.persistInternal();
+  };
 
-  public hasUnsavedChanges(): boolean {
-    return this.hasUnsavedChangesFlag;
-  }
+  // ==========================================================================
+  //  INICIALIZACIÓN
+  // ==========================================================================
 
-  public hasWritableHandle(): boolean {
-    return this.fileHandle !== null;
-  }
-
-  public getFileHandle(): any | null {
-    return this.fileHandle;
-  }
-
-  public setFileHandle(handle: any | null): void {
-    this.fileHandle = handle;
-    if (handle && this.saveStatus === 'pending_manual') {
-      this.saveToFile();
-    } else {
-      this.notifyListeners();
-    }
-  }
-
-  /**
-   * Sincroniza el estado actual con el almacenamiento local seguro (IndexedDB + localStorage)
-   * utilizando la ruta exacta almacenada en dbPath
-   */
-  private async syncToIndexedDb(): Promise<void> {
-    const currentPath = this.getDbPath();
-    this.dbPath = currentPath;
-    this.databaseFileName = currentPath;
-    this.cache.dbPath = currentPath;
-    if (!this.cache.invoiceConsecutive) {
-      this.cache.invoiceConsecutive = 1;
-    }
-    this.isDatabaseLoaded = true;
-    await saveActiveDatabaseToIndexedDb(currentPath, this.cache, this.fileHandle);
-  }
-
-  /**
-   * Inicializa la base de datos desde el almacenamiento interno de la app si existe,
-   * leyendo exactamente la misma dbPath y el número consecutivo de factura.
-   */
   public async initFromStorage(): Promise<boolean> {
     try {
-      const storedPath = getStoredDbPath() || 'inventario.json';
+      const storedPath = getStoredDbPath();
+      if (!storedPath) {
+        this.isDatabaseLoaded = false;
+        this.databaseFileName = null;
+        this.saveStatus = 'idle';
+        this.hasUnsavedChangesFlag = false;
+        this.notifyListeners();
+        return false;
+      }
+
       this.dbPath = storedPath;
       this.databaseFileName = storedPath;
 
       const stored = await loadActiveDatabaseFromIndexedDb();
-      if (stored && stored.data && Array.isArray(stored.data.products)) {
-        this.cache = stored.data;
-        if (typeof this.cache.invoiceConsecutive !== 'number' || this.cache.invoiceConsecutive < 1) {
-          const maxInv = Array.isArray(this.cache.movements)
-            ? this.cache.movements.reduce((max, m) => {
-                if (m.numeroFactura) {
-                  const match = m.numeroFactura.match(/\d+/);
-                  if (match) {
-                    const val = parseInt(match[0], 10);
-                    return val > max ? val : max;
-                  }
-                }
-                return max;
-              }, 0)
-            : 0;
-          this.cache.invoiceConsecutive = maxInv > 0 ? maxInv + 1 : 1;
-        }
-        this.cache.dbPath = stored.fileName || storedPath;
-        this.isDatabaseLoaded = true;
-        this.databaseFileName = stored.fileName || storedPath;
-        this.dbPath = this.databaseFileName;
-        setStoredDbPath(this.dbPath);
-        this.fileHandle = stored.handle || null;
-        this.lastSavedAt = stored.updatedAt ? new Date(stored.updatedAt) : new Date();
-        this.hasUnsavedChangesFlag = false;
-        this.saveStatus = 'saved';
-
-        if (this.fileHandle && typeof this.fileHandle.queryPermission === 'function') {
-          try {
-            const state = await this.fileHandle.queryPermission({ mode: 'readwrite' });
-            if (state !== 'granted') {
-              this.saveStatus = 'pending_manual';
-            }
-          } catch (e) {
-            console.warn('Error comprobando permisos iniciales:', e);
-          }
-        }
-
+      if (!stored?.data || !Array.isArray(stored.data.products)) {
+        this.isDatabaseLoaded = false;
+        this.saveStatus = 'idle';
         this.notifyListeners();
-        return true;
+        return false;
       }
-    } catch (e) {
-      console.warn('Error inicializando desde almacenamiento interno:', e);
-    }
 
-    // Si aún no hay datos guardados previamente, inicializar con la ruta predeterminada
-    if (!this.isDatabaseLoaded) {
-      await this.createNewDatabase('inventario.json', true, null);
+      this.cache = stored.data;
+
+      if (!this.cache.empresa) {
+        this.cache.empresa = { ...DEFAULT_COMPANY };
+      }
+
+      if (typeof this.cache.invoiceConsecutive !== 'number' || this.cache.invoiceConsecutive < 1) {
+        this.cache.invoiceConsecutive = this.computeNextInvoiceFromMovements(this.cache.movements);
+      }
+
+      this.cache.dbPath = stored.fileName || storedPath;
+      this.databaseFileName = stored.fileName || storedPath;
+      this.dbPath = this.databaseFileName || storedPath;
+      setStoredDbPath(this.dbPath);
+
+      this.isDatabaseLoaded = true;
+      this.fileHandle = stored.handle || null;
+      this.lastSavedAt = stored.updatedAt ? new Date(stored.updatedAt) : new Date();
+      this.hasUnsavedChangesFlag = false;
+      this.saveStatus = 'saved';
+
+      if (this.fileHandle) {
+        try {
+          const perm = await this.fileHandle.queryPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') {
+            this.saveStatus = 'pending_manual';
+            this.hasUnsavedChangesFlag = true;
+          }
+        } catch {
+          this.saveStatus = 'pending_manual';
+          this.hasUnsavedChangesFlag = true;
+        }
+      }
+
+      this.notifyListeners();
       return true;
+    } catch (e) {
+      console.warn('[db] initFromStorage error', e);
+      this.isDatabaseLoaded = false;
+      this.saveStatus = 'idle';
+      this.notifyListeners();
+      return false;
     }
-
-    return false;
   }
 
-  /**
-   * Carga una base de datos externa desde un archivo File (.db o .json).
-   * Almacena la ruta del archivo seleccionado en la variable de estado persistente dbPath.
-   */
+  private computeNextInvoiceFromMovements(movements: StockMovement[]): number {
+    const max = movements.reduce((acc, m) => {
+      if (!m.numeroFactura) return acc;
+      const match = m.numeroFactura.match(/\d+/);
+      if (!match) return acc;
+      const v = parseInt(match[0], 10);
+      return v > acc ? v : acc;
+    }, 0);
+    return max > 0 ? max + 1 : 1;
+  }
+
+  // ==========================================================================
+  //  CARGA / CREACIÓN
+  // ==========================================================================
+
   public async loadFromFile(
     file: File,
-    handle?: any | null
+    handle?: FileSystemFileHandle | null
   ): Promise<{
     success: boolean;
     message?: string;
@@ -519,94 +266,67 @@ class InventoryDatabase {
   }> {
     try {
       const text = await file.text();
+
+      if (text.trim().length === 0) {
+        return this.applyNewDatabase(file.name, [], [], [], 1, handle);
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return {
+          success: false,
+          message:
+            'No se pudo leer el archivo. Asegúrate de que es un .json válido con estructura de base de datos.',
+        };
+      }
+
       let products: Product[] = [];
       let templates: InstallationTemplate[] = [];
       let movements: StockMovement[] = [];
       let version = 1;
       let invoiceConsecutive = 1;
+      let empresa: CompanyInfo = { ...DEFAULT_COMPANY };
 
-      if (text.trim().length === 0) {
-        // Archivo nuevo en blanco
-        products = [];
-        templates = [];
-        movements = [];
-      } else {
-        try {
-          const parsed = JSON.parse(text);
-          if (Array.isArray(parsed.products)) {
-            products = parsed.products;
-            templates = Array.isArray(parsed.templates) ? parsed.templates : [];
-            movements = Array.isArray(parsed.movements) ? parsed.movements : [];
-            version = parsed.version || 1;
-            if (typeof parsed.invoiceConsecutive === 'number' && parsed.invoiceConsecutive > 0) {
-              invoiceConsecutive = parsed.invoiceConsecutive;
-            } else {
-              const maxInv = movements.reduce((max, m) => {
-                if (m.numeroFactura) {
-                  const match = m.numeroFactura.match(/\d+/);
-                  if (match) {
-                    const val = parseInt(match[0], 10);
-                    return val > max ? val : max;
-                  }
-                }
-                return max;
-              }, 0);
-              invoiceConsecutive = maxInv > 0 ? maxInv + 1 : 1;
-            }
-          } else if (Array.isArray(parsed)) {
-            // Compatibilidad si el archivo era una lista simple de productos
-            products = parsed;
-          } else {
-            return {
-              success: false,
-              message: 'El archivo no tiene una estructura de base de datos válida.',
-            };
-          }
-        } catch (parseError) {
-          return {
-            success: false,
-            message: 'No se pudo leer el archivo. Asegúrate de que es un archivo .json o .db con datos estructurados.',
-          };
+      if (Array.isArray(parsed.products)) {
+        products = parsed.products.map((p: any) => this.normalizeProduct(p));
+        templates = Array.isArray(parsed.templates)
+          ? parsed.templates.map((t: any) => this.normalizeTemplate(t))
+          : [];
+        movements = Array.isArray(parsed.movements)
+          ? parsed.movements.map((m: any) => this.normalizeMovement(m))
+          : [];
+        version = parsed.version || 1;
+        invoiceConsecutive =
+          typeof parsed.invoiceConsecutive === 'number' && parsed.invoiceConsecutive > 0
+            ? parsed.invoiceConsecutive
+            : this.computeNextInvoiceFromMovements(movements);
+        if (parsed.empresa && typeof parsed.empresa === 'object') {
+          empresa = { ...DEFAULT_COMPANY, ...parsed.empresa };
         }
+      } else if (Array.isArray(parsed)) {
+        products = parsed.map((p: any) => this.normalizeProduct(p));
+      } else {
+        return {
+          success: false,
+          message: 'El archivo no tiene una estructura de base de datos válida.',
+        };
       }
 
-      // Guardar la ruta seleccionada en la variable persistente dbPath (ej: localStorage)
-      const selectedPath = file.name;
-      this.dbPath = selectedPath;
-      this.databaseFileName = selectedPath;
-      setStoredDbPath(selectedPath);
-
-      this.cache = {
-        version,
-        app: 'Gestión de Inventario y Stock',
-        updatedAt: new Date().toISOString(),
-        dbPath: selectedPath,
-        invoiceConsecutive,
+      const result = await this.applyNewDatabase(
+        file.name,
         products,
         templates,
         movements,
-      };
-
-      this.isDatabaseLoaded = true;
-      this.fileHandle = handle || null;
-      this.lastSavedAt = new Date();
-      this.hasUnsavedChangesFlag = false;
-      this.saveStatus = handle ? 'saved' : 'pending_manual';
-
-      if (handle) {
-        await verifyPermission(handle, true);
-      }
-
-      // Si el archivo estaba vacío y tenemos handle, guardamos la estructura base de inmediato
-      if (text.trim().length === 0 && handle) {
-        await this.saveToFile();
-      }
-
-      await this.syncToIndexedDb();
-      this.notifyListeners();
+        invoiceConsecutive,
+        handle,
+        version,
+        empresa
+      );
 
       return {
-        success: true,
+        ...result,
         stats: {
           products: products.length,
           movements: movements.length,
@@ -614,39 +334,38 @@ class InventoryDatabase {
         },
       };
     } catch (err: any) {
-      console.error('Error al cargar archivo de base de datos', err);
+      console.error('[db] loadFromFile error', err);
       return {
         success: false,
-        message: err.message || 'Error al acceder al archivo de base de datos.',
+        message: err.message || 'Error al acceder al archivo.',
       };
     }
   }
 
-  /**
-   * Crea una nueva base de datos portátil en memoria y guarda su ruta en dbPath.
-   */
-  public async createNewDatabase(
+  private async applyNewDatabase(
     fileName: string,
-    withSampleData: boolean = false,
-    handle?: any | null
-  ): Promise<void> {
-    const cleanFileName = fileName.trim().endsWith('.json') || fileName.trim().endsWith('.db')
-      ? fileName.trim()
-      : `${fileName.trim()}.json`;
-
-    this.dbPath = cleanFileName;
-    this.databaseFileName = cleanFileName;
-    setStoredDbPath(cleanFileName);
+    products: Product[],
+    templates: InstallationTemplate[],
+    movements: StockMovement[],
+    invoiceConsecutive: number,
+    handle?: FileSystemFileHandle | null,
+    version: number = 1,
+    empresa?: CompanyInfo
+  ): Promise<{ success: boolean; message?: string }> {
+    this.dbPath = fileName;
+    this.databaseFileName = fileName;
+    setStoredDbPath(fileName);
 
     this.cache = {
-      version: 1,
+      version,
       app: 'Gestión de Inventario y Stock',
       updatedAt: new Date().toISOString(),
-      dbPath: cleanFileName,
-      invoiceConsecutive: withSampleData ? 2 : 1,
-      products: withSampleData ? [...SAMPLE_PRODUCTS] : [],
-      templates: withSampleData ? [...SAMPLE_TEMPLATES] : [],
-      movements: withSampleData ? [...SAMPLE_MOVEMENTS] : [],
+      dbPath: fileName,
+      invoiceConsecutive,
+      empresa: empresa || { ...DEFAULT_COMPANY },
+      products,
+      templates,
+      movements,
     };
 
     this.isDatabaseLoaded = true;
@@ -655,168 +374,211 @@ class InventoryDatabase {
     this.hasUnsavedChangesFlag = false;
     this.saveStatus = handle ? 'saved' : 'pending_manual';
 
+    await saveActiveDatabaseToIndexedDb(fileName, this.cache, this.fileHandle);
+
     if (handle) {
-      await verifyPermission(handle, true);
-      await this.saveToFile();
+      const ok = await verifyPermission(handle, true);
+      if (ok) {
+        await this.writeToFile();
+      }
     }
 
-    await this.syncToIndexedDb();
     this.notifyListeners();
+    return { success: true };
   }
 
-  /**
-   * Guarda automáticamente los datos en el archivo externo vinculado.
-   */
-  public async saveToFile(): Promise<{ success: boolean; message?: string }> {
-    if (!this.isDatabaseLoaded) {
-      return { success: false, message: 'No hay base de datos cargada.' };
+  public async createNewDatabase(
+    fileName: string,
+    _withSampleData: boolean = false,
+    handle?: FileSystemFileHandle | null
+  ): Promise<void> {
+    const clean = fileName.trim().endsWith('.json')
+      ? fileName.trim()
+      : `${fileName.trim()}.json`;
+
+    await this.applyNewDatabase(clean, [], [], [], 1, handle, 1, { ...DEFAULT_COMPANY });
+  }
+
+  // ==========================================================================
+  //  GUARDADO
+  // ==========================================================================
+
+  private persistInternal(): Promise<void> {
+    this.cache.updatedAt = new Date().toISOString();
+
+    if (this.persistDebounceTimer !== null) {
+      window.clearTimeout(this.persistDebounceTimer);
     }
 
-    const jsonContent = JSON.stringify(this.cache, null, 2);
-
-    if (this.fileHandle && typeof this.fileHandle.createWritable === 'function') {
-      try {
-        this.saveStatus = 'saving';
-        this.notifyListeners();
-
-        // Si tenemos handle, comprobar permisos sin romper la operación
-        if (typeof this.fileHandle.queryPermission === 'function') {
-          try {
-            const perm = await this.fileHandle.queryPermission({ mode: 'readwrite' });
-            if (perm !== 'granted') {
-              this.saveStatus = 'pending_manual';
-              this.hasUnsavedChangesFlag = true;
-              this.notifyListeners();
-              return { success: false, message: 'Permiso de escritura pendiente.' };
-            }
-          } catch (pErr) {
-            // Ignorar y probar crear el writable
-          }
+    return new Promise((resolve) => {
+      this.persistDebounceTimer = window.setTimeout(async () => {
+        this.persistDebounceTimer = null;
+        try {
+          await saveActiveDatabaseToIndexedDb(this.getDbPath(), this.cache, this.fileHandle);
+        } catch (e) {
+          console.warn('[db] persistInternal warning', e);
         }
+        resolve();
+      }, this.persistDebounceMs);
+    });
+  }
 
-        // keepExistingData: false trunca y sobrescribe exactamente el archivo en uso
-        const writable = await this.fileHandle.createWritable({ keepExistingData: false });
-        await writable.write(jsonContent);
-        await writable.close();
+  private async persistInternalImmediate(): Promise<void> {
+    if (this.persistDebounceTimer !== null) {
+      window.clearTimeout(this.persistDebounceTimer);
+      this.persistDebounceTimer = null;
+    }
+    this.cache.updatedAt = new Date().toISOString();
+    try {
+      await saveActiveDatabaseToIndexedDb(this.getDbPath(), this.cache, this.fileHandle);
+    } catch (e) {
+      console.warn('[db] persistInternalImmediate warning', e);
+    }
+  }
 
+  private async writeToFile(): Promise<{ ok: boolean; reason?: string }> {
+    if (!this.fileHandle) {
+      return { ok: false, reason: 'No hay archivo vinculado.' };
+    }
+
+    try {
+      const perm = await verifyPermission(this.fileHandle, true);
+      if (!perm) {
+        return { ok: false, reason: 'Permiso denegado por el navegador.' };
+      }
+
+      const writable = await this.fileHandle.createWritable({ keepExistingData: false });
+      await writable.write(JSON.stringify(this.cache, null, 2));
+      await writable.close();
+      return { ok: true };
+    } catch (e: any) {
+      console.warn('[db] writeToFile error', e);
+      return { ok: false, reason: e?.message || 'Error de escritura.' };
+    }
+  }
+
+  private async doActualSave(): Promise<{
+    success: boolean;
+    fileName: string;
+    method: 'direct' | 'internal' | 'error';
+    message: string;
+  }> {
+    this.cache.updatedAt = new Date().toISOString();
+
+    await this.persistInternalImmediate();
+
+    if (this.fileHandle) {
+      const result = await this.writeToFile();
+      if (result.ok) {
         this.lastSavedAt = new Date();
         this.hasUnsavedChangesFlag = false;
         this.saveStatus = 'saved';
-        await this.syncToIndexedDb();
-        this.notifyListeners();
-        return { success: true };
-      } catch (err: any) {
-        console.error('Error al sobrescribir automáticamente en el archivo en uso', err);
-        this.saveStatus = 'pending_manual';
-        this.hasUnsavedChangesFlag = true;
-        await this.syncToIndexedDb();
+        await this.persistInternalImmediate();
         this.notifyListeners();
         return {
-          success: false,
-          message: 'Permiso de escritura pendiente. Pulsa "Guardar" para confirmar.',
+          success: true,
+          fileName: this.getDbPath(),
+          method: 'direct',
+          message: `✅ Archivo "${this.getDbPath()}" actualizado correctamente.`,
         };
       }
-    } else {
-      // Sin handle con permisos de escritura directa
+      this.lastSavedAt = new Date();
       this.saveStatus = 'pending_manual';
       this.hasUnsavedChangesFlag = true;
-      await this.syncToIndexedDb();
       this.notifyListeners();
       return {
-        success: true,
-        message: 'Modificación registrada en memoria interna.',
+        success: false,
+        fileName: this.getDbPath(),
+        method: 'error',
+        message: `⚠️ No se pudo escribir en "${this.getDbPath()}": ${result.reason}.`,
       };
     }
-  }
 
-  /**
-   * Método principal para el botón de "Guardar".
-   * Usa la ruta de base de datos almacenada en la variable persistente dbPath para abrir y escribir en ella.
-   * NO crea una nueva conexión ni un nuevo archivo con nombres generados con fecha (inventario_2026...db).
-   * Escribe y sobrescribe en la MISMA base de datos que el usuario eligió.
-   */
-  public async saveCurrentDatabase(): Promise<{
-    success: boolean;
-    fileName: string;
-    method: 'direct' | 'internal';
-    message: string;
-  }> {
-    const targetPath = this.getDbPath();
-    this.dbPath = targetPath;
-    this.databaseFileName = targetPath;
-    this.cache.dbPath = targetPath;
-    if (!this.cache.invoiceConsecutive) {
-      this.cache.invoiceConsecutive = 1;
-    }
-    this.cache.updatedAt = new Date().toISOString();
-    this.isDatabaseLoaded = true;
-
-    const jsonContent = JSON.stringify(this.cache, null, 2);
-
-    this.saveStatus = 'saving';
-    this.notifyListeners();
-
-    // 1. Guardar y sincronizar de inmediato en el almacenamiento persistente interno dual (IndexedDB + localStorage) en la misma dbPath
-    await this.syncToIndexedDb();
-
-    // 2. Si hay un manejador de archivo directo en disco/pendrive vinculado para dbPath, escribir en ese MISMO archivo existente
-    if (this.fileHandle && typeof this.fileHandle.createWritable === 'function') {
-      try {
-        const hasPerm = await verifyPermission(this.fileHandle, true);
-        if (hasPerm) {
-          // keepExistingData: false trunca y sobrescribe exactamente el archivo existente en dbPath
-          const writable = await this.fileHandle.createWritable({ keepExistingData: false });
-          await writable.write(jsonContent);
-          await writable.close();
-
-          this.lastSavedAt = new Date();
-          this.hasUnsavedChangesFlag = false;
-          this.saveStatus = 'saved';
-          await this.syncToIndexedDb();
-          this.notifyListeners();
-
-          return {
-            success: true,
-            fileName: targetPath,
-            method: 'direct',
-            message: `¡Cambios guardados y actualizados en "${targetPath}"!`,
-          };
-        }
-      } catch (err: any) {
-        console.warn('Advertencia al escribir directamente en el archivo vinculado:', err);
-      }
-    }
-
-    // 3. Los cambios quedan guardados y actualizados en la base de datos existente bajo dbPath.
-    // NUNCA crea archivos nuevos ni genera descargas duplicadas.
     this.lastSavedAt = new Date();
     this.hasUnsavedChangesFlag = false;
     this.saveStatus = 'saved';
-    await this.syncToIndexedDb();
     this.notifyListeners();
 
     return {
       success: true,
-      fileName: targetPath,
+      fileName: this.getDbPath(),
       method: 'internal',
-      message: `¡Cambios guardados correctamente en "${targetPath}"!`,
+      message: `💾 Cambios guardados en la app. Vincula un archivo o usa "Descargar copia" para el .json.`,
     };
   }
 
-  /**
-   * Genera un Blob descargable de la base de datos completa.
-   */
-  public exportDatabaseAsBlob(): { blob: Blob; fileName: string } {
-    const jsonStr = JSON.stringify(this.cache, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const fileName = this.databaseFileName || 'inventario.json';
-    return { blob, fileName };
+  public async saveCurrentDatabase(): Promise<{
+    success: boolean;
+    fileName: string;
+    method: 'direct' | 'internal' | 'error';
+    message: string;
+  }> {
+    if (!this.isDatabaseLoaded) {
+      return {
+        success: false,
+        fileName: this.getDbPath(),
+        method: 'error',
+        message: 'No hay base de datos cargada.',
+      };
+    }
+
+    if (this.isSaving) {
+      this.pendingSaveNeeded = true;
+      return new Promise((resolve) => {
+        this.pendingSaveResolvers.push(resolve);
+      });
+    }
+
+    return this.runSave();
   }
 
-  /**
-   * Cierra o desconecta la base de datos actual.
-   * Si clearStorage es false, no borra los datos guardados en el almacenamiento interno.
-   */
+  private async runSave(): Promise<{
+    success: boolean;
+    fileName: string;
+    method: 'direct' | 'internal' | 'error';
+    message: string;
+  }> {
+    this.isSaving = true;
+    this.saveStatus = 'saving';
+    this.notifyListeners();
+
+    try {
+      const result = await this.doActualSave();
+      return result;
+    } finally {
+      this.isSaving = false;
+
+      if (this.pendingSaveNeeded) {
+        this.pendingSaveNeeded = false;
+        setTimeout(async () => {
+          const finalResult = await this.runSave();
+          const resolvers = this.pendingSaveResolvers.splice(0);
+          resolvers.forEach((r) => r(finalResult));
+        }, 50);
+      } else {
+        const resolvers = this.pendingSaveResolvers.splice(0);
+        resolvers.forEach((r) => r(undefined as any));
+      }
+    }
+  }
+
+  private persist(data: DatabaseSchema): void {
+    this.cache = { ...data, updatedAt: new Date().toISOString() };
+    if (!this.isDatabaseLoaded) this.isDatabaseLoaded = true;
+    if (!this.databaseFileName) this.databaseFileName = this.getDbPath();
+
+    this.persistInternal().then(() => {
+      this.hasUnsavedChangesFlag = true;
+      this.saveStatus = 'pending_manual';
+      this.notifyListeners();
+    });
+  }
+
+  public setFileHandle(handle: FileSystemFileHandle | null): void {
+    this.fileHandle = handle;
+    this.notifyListeners();
+  }
+
   public disconnectDatabase(clearStorage: boolean = false): void {
     if (clearStorage) {
       clearActiveDatabaseInIndexedDb();
@@ -824,6 +586,7 @@ class InventoryDatabase {
         version: 1,
         app: 'Gestión de Inventario y Stock',
         updatedAt: new Date().toISOString(),
+        empresa: { ...DEFAULT_COMPANY },
         products: [],
         templates: [],
         movements: [],
@@ -841,235 +604,291 @@ class InventoryDatabase {
     this.notifyListeners();
   }
 
-  // --- Internal Data Persist (Dispatches Auto-save to external file) ---
-  private getData(): DatabaseSchema {
-    return this.cache;
-  }
-
-  private persist(data: DatabaseSchema): void {
-    this.cache = {
-      ...data,
-      updatedAt: new Date().toISOString(),
+  public exportDatabaseAsBlob(): { blob: Blob; fileName: string } {
+    const jsonStr = JSON.stringify(this.cache, null, 2);
+    return {
+      blob: new Blob([jsonStr], { type: 'application/json' }),
+      fileName: this.databaseFileName || 'inventario.json',
     };
-
-    if (!this.isDatabaseLoaded) {
-      this.isDatabaseLoaded = true;
-    }
-    if (!this.databaseFileName) {
-      this.databaseFileName = 'inventario.json';
-    }
-
-    // 1. Sincronización inmediata a IndexedDB y localStorage a prueba de pérdidas
-    this.syncToIndexedDb();
-
-    // 2. Sobrescribir inmediatamente en el archivo físico vinculado si existe
-    if (this.fileHandle) {
-      this.saveToFile();
-    } else {
-      this.hasUnsavedChangesFlag = true;
-      this.saveStatus = 'pending_manual';
-      this.notifyListeners();
-    }
   }
 
-  // --- Products CRUD ---
-  public getProducts(): Product[] {
-    return [...this.getData().products];
+  // ==========================================================================
+  //  NORMALIZACIÓN
+  // ==========================================================================
+
+  private normalizeProduct(p: any): Product {
+    const now = new Date().toISOString();
+    return {
+      id: String(p.id ?? `prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+      nombre: String(p.nombre ?? 'Sin nombre'),
+      categoria: String(p.categoria ?? 'General'),
+      stockActual: Number(p.stockActual) || 0,
+      stockMinimo: Number(p.stockMinimo) || 0,
+      precioCompra: Number(p.precioCompra) || 0,
+      precioVenta: Number(p.precioVenta) || 0,
+      proveedor: String(p.proveedor ?? ''),
+      fechaEntrada: String(p.fechaEntrada ?? now.split('T')[0]),
+      unidadMedida: String(p.unidadMedida ?? 'ud'),
+      ubicacion: p.ubicacion ? String(p.ubicacion) : undefined,
+      notas: p.notas ? String(p.notas) : undefined,
+      createdAt: String(p.createdAt ?? now),
+      updatedAt: String(p.updatedAt ?? now),
+    };
   }
 
-  public getProductById(id: string): Product | undefined {
-    return this.getData().products.find((p) => p.id === id);
+  private normalizeTemplate(t: any): InstallationTemplate {
+    const now = new Date().toISOString();
+    return {
+      id: String(t.id ?? `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+      nombre: String(t.nombre ?? 'Sin nombre'),
+      descripcion: String(t.descripcion ?? ''),
+      categoria: t.categoria ? String(t.categoria) : undefined,
+      items: Array.isArray(t.items)
+        ? t.items.map((i: any) => ({
+            productoId: String(i.productoId),
+            cantidad: Number(i.cantidad) || 0,
+            notasItem: i.notasItem ? String(i.notasItem) : undefined,
+          }))
+        : [],
+      precioVentaPersonalizado:
+        typeof t.precioVentaPersonalizado === 'number' ? t.precioVentaPersonalizado : null,
+      tiempoEstimadoHoras:
+        typeof t.tiempoEstimadoHoras === 'number' ? t.tiempoEstimadoHoras : undefined,
+      createdAt: String(t.createdAt ?? now),
+      updatedAt: String(t.updatedAt ?? now),
+    };
   }
 
-  public saveProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Product {
-    const data = this.getData();
+  private normalizeExtraService(s: any): ExtraService {
+    return {
+      id: String(s.id ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+      nombre: String(s.nombre ?? 'Servicio'),
+      cantidad: Number(s.cantidad) || 1,
+      precioVenta: Number(s.precioVenta) || 0,
+      coste: Number(s.coste) || 0,
+      notas: s.notas ? String(s.notas) : undefined,
+    };
+  }
+
+  private normalizeMovement(m: any): StockMovement {
+    const serviciosExtra = Array.isArray(m.serviciosExtra)
+      ? m.serviciosExtra.map((s: any) => this.normalizeExtraService(s))
+      : undefined;
+
+    return {
+      ...m,
+      serviciosExtra,
+      descuento: typeof m.descuento === 'number' ? m.descuento : 0,
+    } as StockMovement;
+  }
+
+  // ==========================================================================
+  //  PRODUCTS CRUD
+  // ==========================================================================
+
+  public saveProduct(
+    productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+  ): Product {
     const now = new Date().toISOString();
 
     if (productData.id) {
-      // Update
-      const index = data.products.findIndex((p) => p.id === productData.id);
-      if (index !== -1) {
+      const idx = this.cache.products.findIndex((p) => p.id === productData.id);
+      if (idx !== -1) {
         const updated: Product = {
-          ...data.products[index],
+          ...this.cache.products[idx],
           ...productData,
           id: productData.id,
           updatedAt: now,
         };
-        data.products[index] = updated;
-        this.persist({ ...data });
+        this.cache.products[idx] = updated;
+        this.persist({ ...this.cache });
         return updated;
       }
     }
 
-    // Create
     const newProduct: Product = {
       ...productData,
-      id: productData.id || `prod-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: productData.id || `prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       createdAt: now,
       updatedAt: now,
     };
-    data.products.push(newProduct);
-    this.persist({ ...data });
+    this.cache.products.push(newProduct);
+    this.persist({ ...this.cache });
     return newProduct;
   }
 
   public deleteProduct(id: string): boolean {
-    const data = this.getData();
-    const initialLen = data.products.length;
-    data.products = data.products.filter((p) => p.id !== id);
-    if (data.products.length !== initialLen) {
-      this.persist({ ...data });
+    const before = this.cache.products.length;
+    this.cache.products = this.cache.products.filter((p) => p.id !== id);
+    if (this.cache.products.length !== before) {
+      this.persist({ ...this.cache });
       return true;
     }
     return false;
   }
 
-  // --- Templates CRUD ---
-  public getTemplates(): InstallationTemplate[] {
-    return [...this.getData().templates];
-  }
-
-  public getTemplateById(id: string): InstallationTemplate | undefined {
-    return this.getData().templates.find((t) => t.id === id);
-  }
+  // ==========================================================================
+  //  TEMPLATES CRUD
+  // ==========================================================================
 
   public saveTemplate(
     templateData: Omit<InstallationTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
   ): InstallationTemplate {
-    const data = this.getData();
     const now = new Date().toISOString();
 
     if (templateData.id) {
-      const index = data.templates.findIndex((t) => t.id === templateData.id);
-      if (index !== -1) {
+      const idx = this.cache.templates.findIndex((t) => t.id === templateData.id);
+      if (idx !== -1) {
         const updated: InstallationTemplate = {
-          ...data.templates[index],
+          ...this.cache.templates[idx],
           ...templateData,
           id: templateData.id,
           updatedAt: now,
         };
-        data.templates[index] = updated;
-        this.persist({ ...data });
+        this.cache.templates[idx] = updated;
+        this.persist({ ...this.cache });
         return updated;
       }
     }
 
     const newTemplate: InstallationTemplate = {
       ...templateData,
-      id: templateData.id || `tpl-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: templateData.id || `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       createdAt: now,
       updatedAt: now,
     };
-    data.templates.push(newTemplate);
-    this.persist({ ...data });
+    this.cache.templates.push(newTemplate);
+    this.persist({ ...this.cache });
     return newTemplate;
   }
 
   public deleteTemplate(id: string): boolean {
-    const data = this.getData();
-    const initialLen = data.templates.length;
-    data.templates = data.templates.filter((t) => t.id !== id);
-    if (data.templates.length !== initialLen) {
-      this.persist({ ...data });
+    const before = this.cache.templates.length;
+    this.cache.templates = this.cache.templates.filter((t) => t.id !== id);
+    if (this.cache.templates.length !== before) {
+      this.persist({ ...this.cache });
       return true;
     }
     return false;
   }
 
-  // --- Movements and Automatic Stock Deduction ---
-  public getMovements(): StockMovement[] {
-    return [...this.getData().movements].sort(
-      (a, b) => new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime()
-    );
-  }
+  // ==========================================================================
+  //  MOVIMIENTOS
+  // ==========================================================================
 
   public executeInstallation(params: {
     plantillaId?: string;
     plantillaNombre?: string;
     motivo: string;
     cliente?: string;
+    clienteCI?: string;
+    clienteDireccion?: string;
     numeroFactura?: string;
+    formaPago?: string;
     items: { productoId: string; cantidad: number }[];
+    serviciosExtra?: Omit<ExtraService, 'id'>[];
+    descuento?: number;
     observaciones?: string;
     usuarioResponsable?: string;
   }): { success: boolean; movement?: StockMovement; error?: string } {
-    const data = this.getData();
     const nowIso = new Date().toISOString();
 
-    if (!params.items || params.items.length === 0) {
-      return { success: false, error: 'La instalación debe contener al menos un producto a descontar.' };
+    if (!params.items?.length && !params.serviciosExtra?.length) {
+      return {
+        success: false,
+        error: 'La instalación debe contener al menos un producto o un servicio.',
+      };
+    }
+    if (!params.motivo?.trim()) {
+      return { success: false, error: 'Debe especificar el motivo del movimiento.' };
     }
 
-    if (!params.motivo || params.motivo.trim() === '') {
-      return { success: false, error: 'Debe especificar el motivo del movimiento (ej: "Instalación cliente Pérez").' };
-    }
-
-    // Gestionar el número consecutivo de factura que se guarda en esta misma base de datos
     let facturaFinal = params.numeroFactura?.trim();
     if (!facturaFinal) {
       facturaFinal = this.getNextInvoiceNumber();
-      const currentConsecutive = this.getInvoiceConsecutive();
-      data.invoiceConsecutive = currentConsecutive + 1;
+      this.cache.invoiceConsecutive = this.getInvoiceConsecutive() + 1;
     } else {
       const match = facturaFinal.match(/\d+/);
       if (match) {
         const val = parseInt(match[0], 10);
-        if (!isNaN(val) && val >= (data.invoiceConsecutive || 1)) {
-          data.invoiceConsecutive = val + 1;
+        if (!isNaN(val) && val >= this.getInvoiceConsecutive()) {
+          this.cache.invoiceConsecutive = val + 1;
         }
       }
     }
 
     const movementItems: StockMovementItem[] = [];
-    let costoTotal = 0;
-    let ingresoTotal = 0;
+    let costoProductos = 0;
+    let ingresoProductos = 0;
 
-    for (const item of params.items) {
-      const productIndex = data.products.findIndex((p) => p.id === item.productoId);
-      if (productIndex === -1) {
-        return { success: false, error: `Producto con ID ${item.productoId} no encontrado.` };
+    for (const item of params.items || []) {
+      const idx = this.cache.products.findIndex((p) => p.id === item.productoId);
+      if (idx === -1) {
+        return { success: false, error: `Producto ${item.productoId} no encontrado.` };
       }
-
-      const product = data.products[productIndex];
-      const stockAnterior = product.stockActual;
+      const prod = this.cache.products[idx];
+      const stockAnterior = prod.stockActual;
       const stockPosterior = stockAnterior - item.cantidad;
 
-      const subCosto = item.cantidad * (product.precioCompra || 0);
-      const subIngreso = item.cantidad * (product.precioVenta || 0);
-
-      costoTotal += subCosto;
-      ingresoTotal += subIngreso;
+      costoProductos += item.cantidad * (prod.precioCompra || 0);
+      ingresoProductos += item.cantidad * (prod.precioVenta || 0);
 
       movementItems.push({
-        productoId: product.id,
-        productoNombre: product.nombre,
+        productoId: prod.id,
+        productoNombre: prod.nombre,
         cantidad: item.cantidad,
-        unidadMedida: product.unidadMedida || 'ud',
-        precioCompraUnitario: product.precioCompra,
-        precioVentaUnitario: product.precioVenta,
+        unidadMedida: prod.unidadMedida || 'ud',
+        precioCompraUnitario: prod.precioCompra,
+        precioVentaUnitario: prod.precioVenta,
         stockAnterior,
         stockPosterior,
       });
 
-      data.products[productIndex] = {
-        ...product,
-        stockActual: stockPosterior,
-        updatedAt: nowIso,
-      };
+      this.cache.products[idx] = { ...prod, stockActual: stockPosterior, updatedAt: nowIso };
     }
 
-    const gananciaTotal = ingresoTotal - costoTotal;
+    const serviciosExtra: ExtraService[] = (params.serviciosExtra || [])
+      .filter((s) => (s.nombre || '').trim().length > 0)
+      .map((s) => ({
+        id: `srv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        nombre: s.nombre.trim(),
+        cantidad: Number(s.cantidad) || 1,
+        precioVenta: Number(s.precioVenta) || 0,
+        coste: Number(s.coste) || 0,
+        notas: s.notas,
+      }));
+
+    let ingresoServicios = 0;
+    let costeServicios = 0;
+    serviciosExtra.forEach((s) => {
+      ingresoServicios += s.cantidad * s.precioVenta;
+      costeServicios += s.cantidad * s.coste;
+    });
+
+    const descuento = Math.max(0, Number(params.descuento) || 0);
+
+    const gananciaProductos = ingresoProductos - costoProductos;
+    const gananciaServicios = ingresoServicios - costeServicios;
+    const gananciaTotal = gananciaProductos + gananciaServicios;
+
+    const costoTotal = costoProductos;
+    const ingresoTotal = ingresoProductos;
 
     const newMovement: StockMovement = {
-      id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       tipo: 'SALIDA_INSTALACION',
       fechaHora: nowIso,
       motivo: params.motivo.trim(),
       cliente: params.cliente?.trim(),
+      clienteCI: params.clienteCI?.trim(),
+      clienteDireccion: params.clienteDireccion?.trim(),
       numeroFactura: facturaFinal,
+      formaPago: params.formaPago?.trim() || 'USD en efectivo',
       plantillaId: params.plantillaId,
       plantillaNombre: params.plantillaNombre,
       items: movementItems,
+      serviciosExtra: serviciosExtra.length > 0 ? serviciosExtra : undefined,
+      descuento: descuento > 0 ? descuento : undefined,
       costoTotal: Math.round(costoTotal * 100) / 100,
       ingresoTotal: Math.round(ingresoTotal * 100) / 100,
       gananciaTotal: Math.round(gananciaTotal * 100) / 100,
@@ -1077,9 +896,8 @@ class InventoryDatabase {
       observaciones: params.observaciones,
     };
 
-    data.movements.push(newMovement);
-    this.persist({ ...data });
-
+    this.cache.movements.push(newMovement);
+    this.persist({ ...this.cache });
     return { success: true, movement: newMovement };
   }
 
@@ -1091,62 +909,55 @@ class InventoryDatabase {
     proveedor?: string;
     observaciones?: string;
   }): { success: boolean; movement?: StockMovement; error?: string } {
-    const data = this.getData();
     const nowIso = new Date().toISOString();
+    const idx = this.cache.products.findIndex((p) => p.id === params.productoId);
+    if (idx === -1) return { success: false, error: 'Producto no encontrado.' };
+    if (params.cantidad <= 0) return { success: false, error: 'La cantidad debe ser > 0.' };
 
-    const productIndex = data.products.findIndex((p) => p.id === params.productoId);
-    if (productIndex === -1) {
-      return { success: false, error: 'Producto no encontrado.' };
-    }
-
-    if (params.cantidad <= 0) {
-      return { success: false, error: 'La cantidad de entrada debe ser mayor a 0.' };
-    }
-
-    const product = data.products[productIndex];
-    const stockAnterior = product.stockActual;
+    const prod = this.cache.products[idx];
+    const stockAnterior = prod.stockActual;
     const stockPosterior = stockAnterior + params.cantidad;
-    const precioCompraFinal = params.precioCompraNuevo !== undefined && params.precioCompraNuevo > 0 
-      ? params.precioCompraNuevo 
-      : product.precioCompra;
+    const precioCompraFinal =
+      params.precioCompraNuevo && params.precioCompraNuevo > 0
+        ? params.precioCompraNuevo
+        : prod.precioCompra;
 
     const costoTotal = params.cantidad * precioCompraFinal;
 
-    const movementItem: StockMovementItem = {
-      productoId: product.id,
-      productoNombre: product.nombre,
-      cantidad: params.cantidad,
-      unidadMedida: product.unidadMedida || 'ud',
-      precioCompraUnitario: precioCompraFinal,
-      precioVentaUnitario: product.precioVenta,
-      stockAnterior,
-      stockPosterior,
-    };
-
-    data.products[productIndex] = {
-      ...product,
+    this.cache.products[idx] = {
+      ...prod,
       stockActual: stockPosterior,
       precioCompra: precioCompraFinal,
-      proveedor: params.proveedor || product.proveedor,
+      proveedor: params.proveedor || prod.proveedor,
       fechaEntrada: nowIso.split('T')[0],
       updatedAt: nowIso,
     };
 
     const newMovement: StockMovement = {
-      id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       tipo: 'ENTRADA_STOCK',
       fechaHora: nowIso,
-      motivo: params.motivo.trim() || 'Entrada de mercancía / Reposición',
-      items: [movementItem],
+      motivo: params.motivo.trim() || 'Entrada de mercancía',
+      items: [
+        {
+          productoId: prod.id,
+          productoNombre: prod.nombre,
+          cantidad: params.cantidad,
+          unidadMedida: prod.unidadMedida || 'ud',
+          precioCompraUnitario: precioCompraFinal,
+          precioVentaUnitario: prod.precioVenta,
+          stockAnterior,
+          stockPosterior,
+        },
+      ],
       costoTotal: Math.round(costoTotal * 100) / 100,
       ingresoTotal: 0,
       gananciaTotal: 0,
       observaciones: params.observaciones,
     };
 
-    data.movements.push(newMovement);
-    this.persist({ ...data });
-
+    this.cache.movements.push(newMovement);
+    this.persist({ ...this.cache });
     return { success: true, movement: newMovement };
   }
 
@@ -1158,22 +969,12 @@ class InventoryDatabase {
     items: { productoId: string; cantidad: number }[];
     observaciones?: string;
   }): { success: boolean; movement?: StockMovement; error?: string } {
-    const data = this.getData();
     const nowIso = new Date().toISOString();
 
     let facturaFinal = params.numeroFactura?.trim();
     if (params.tipo === 'SALIDA_MANUAL' && !facturaFinal) {
       facturaFinal = this.getNextInvoiceNumber();
-      const currentConsecutive = this.getInvoiceConsecutive();
-      data.invoiceConsecutive = currentConsecutive + 1;
-    } else if (facturaFinal) {
-      const match = facturaFinal.match(/\d+/);
-      if (match) {
-        const val = parseInt(match[0], 10);
-        if (!isNaN(val) && val >= (data.invoiceConsecutive || 1)) {
-          data.invoiceConsecutive = val + 1;
-        }
-      }
+      this.cache.invoiceConsecutive = this.getInvoiceConsecutive() + 1;
     }
 
     const movementItems: StockMovementItem[] = [];
@@ -1181,42 +982,34 @@ class InventoryDatabase {
     let ingresoTotal = 0;
 
     for (const item of params.items) {
-      const productIndex = data.products.findIndex((p) => p.id === item.productoId);
-      if (productIndex === -1) continue;
-
-      const product = data.products[productIndex];
-      const stockAnterior = product.stockActual;
+      const idx = this.cache.products.findIndex((p) => p.id === item.productoId);
+      if (idx === -1) continue;
+      const prod = this.cache.products[idx];
+      const stockAnterior = prod.stockActual;
       const stockPosterior = Math.max(0, stockAnterior - item.cantidad);
 
-      const subCosto = item.cantidad * (product.precioCompra || 0);
-      const subIngreso = item.cantidad * (product.precioVenta || 0);
-
-      costoTotal += subCosto;
-      ingresoTotal += subIngreso;
+      costoTotal += item.cantidad * (prod.precioCompra || 0);
+      ingresoTotal += item.cantidad * (prod.precioVenta || 0);
 
       movementItems.push({
-        productoId: product.id,
-        productoNombre: product.nombre,
+        productoId: prod.id,
+        productoNombre: prod.nombre,
         cantidad: item.cantidad,
-        unidadMedida: product.unidadMedida || 'ud',
-        precioCompraUnitario: product.precioCompra,
-        precioVentaUnitario: product.precioVenta,
+        unidadMedida: prod.unidadMedida || 'ud',
+        precioCompraUnitario: prod.precioCompra,
+        precioVentaUnitario: prod.precioVenta,
         stockAnterior,
         stockPosterior,
       });
 
-      data.products[productIndex] = {
-        ...product,
-        stockActual: stockPosterior,
-        updatedAt: nowIso,
-      };
+      this.cache.products[idx] = { ...prod, stockActual: stockPosterior, updatedAt: nowIso };
     }
 
     const newMovement: StockMovement = {
-      id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       tipo: params.tipo,
       fechaHora: nowIso,
-      motivo: params.motivo.trim() || 'Salida manual de almacén',
+      motivo: params.motivo.trim() || 'Salida manual',
       cliente: params.cliente?.trim(),
       numeroFactura: facturaFinal,
       items: movementItems,
@@ -1226,89 +1019,80 @@ class InventoryDatabase {
       observaciones: params.observaciones,
     };
 
-    data.movements.push(newMovement);
-    this.persist({ ...data });
-
+    this.cache.movements.push(newMovement);
+    this.persist({ ...this.cache });
     return { success: true, movement: newMovement };
   }
 
   public deleteMovement(movementId: string, revertStock: boolean = false): boolean {
-    const data = this.getData();
-    const movIndex = data.movements.findIndex((m) => m.id === movementId);
-    if (movIndex === -1) return false;
+    const idx = this.cache.movements.findIndex((m) => m.id === movementId);
+    if (idx === -1) return false;
 
-    const movement = data.movements[movIndex];
+    const movement = this.cache.movements[idx];
+    const nowIso = new Date().toISOString();
 
-    if (revertStock && movement.items && movement.items.length > 0) {
-      const nowIso = new Date().toISOString();
+    if (revertStock && movement.items?.length) {
       for (const item of movement.items) {
-        const pIndex = data.products.findIndex((p) => p.id === item.productoId);
-        if (pIndex !== -1) {
-          const prod = data.products[pIndex];
-          let updatedStock = prod.stockActual;
-          if (movement.tipo === 'SALIDA_INSTALACION' || movement.tipo === 'SALIDA_MANUAL') {
-            updatedStock = prod.stockActual + item.cantidad;
-          } else if (movement.tipo === 'ENTRADA_STOCK') {
-            updatedStock = Math.max(0, prod.stockActual - item.cantidad);
-          } else if (movement.tipo === 'AJUSTE_INVENTARIO') {
-            updatedStock = item.stockAnterior;
-          }
+        const pIdx = this.cache.products.findIndex((p) => p.id === item.productoId);
+        if (pIdx === -1) continue;
+        const prod = this.cache.products[pIdx];
+        let updatedStock = prod.stockActual;
 
-          data.products[pIndex] = {
-            ...prod,
-            stockActual: updatedStock,
-            updatedAt: nowIso,
-          };
+        if (movement.tipo === 'SALIDA_INSTALACION' || movement.tipo === 'SALIDA_MANUAL') {
+          updatedStock = prod.stockActual + item.cantidad;
+        } else if (movement.tipo === 'ENTRADA_STOCK') {
+          updatedStock = Math.max(0, prod.stockActual - item.cantidad);
+        } else if (movement.tipo === 'AJUSTE_INVENTARIO') {
+          updatedStock = item.stockAnterior;
         }
+
+        this.cache.products[pIdx] = { ...prod, stockActual: updatedStock, updatedAt: nowIso };
       }
     }
 
-    data.movements.splice(movIndex, 1);
-    this.persist({ ...data });
+    this.cache.movements.splice(idx, 1);
+    this.persist({ ...this.cache });
     return true;
   }
 
   public deleteMultipleMovements(movementIds: string[], revertStock: boolean = false): number {
-    let deletedCount = 0;
+    let count = 0;
     for (const id of movementIds) {
-      if (this.deleteMovement(id, revertStock)) {
-        deletedCount++;
-      }
+      if (this.deleteMovement(id, revertStock)) count++;
     }
-    return deletedCount;
+    return count;
   }
 
-  // --- Financial & Stock Queries ---
+  // ==========================================================================
+  //  CONSULTAS FINANCIERAS
+  // ==========================================================================
+
   public getLowStockAlerts(): Product[] {
-    return this.getData().products.filter((p) => p.stockActual <= p.stockMinimo);
+    return this.cache.products.filter((p) => p.stockActual <= p.stockMinimo);
   }
 
   public getFinancialSummary() {
-    const movements = this.getMovements();
-    const installations = movements.filter((m) => m.tipo === 'SALIDA_INSTALACION');
-    
+    const installations = this.cache.movements.filter((m) => m.tipo === 'SALIDA_INSTALACION');
     let totalGanancia = 0;
     let totalIngresos = 0;
     let totalCostos = 0;
-
-    installations.forEach((inst) => {
-      totalGanancia += inst.gananciaTotal || 0;
-      totalIngresos += inst.ingresoTotal || 0;
-      totalCostos += inst.costoTotal || 0;
+    installations.forEach((i) => {
+      totalGanancia += i.gananciaTotal || 0;
+      totalIngresos += i.ingresoTotal || 0;
+      totalCostos += i.costoTotal || 0;
     });
 
-    const products = this.getData().products;
-    const valorInventarioCompra = products.reduce((acc, p) => acc + (p.stockActual * p.precioCompra), 0);
-    const valorInventarioVenta = products.reduce((acc, p) => acc + (p.stockActual * p.precioVenta), 0);
+    const valorCompra = this.cache.products.reduce((a, p) => a + p.stockActual * p.precioCompra, 0);
+    const valorVenta = this.cache.products.reduce((a, p) => a + p.stockActual * p.precioVenta, 0);
 
     return {
       totalGanancia: Math.round(totalGanancia * 100) / 100,
       totalIngresos: Math.round(totalIngresos * 100) / 100,
       totalCostos: Math.round(totalCostos * 100) / 100,
       totalInstalaciones: installations.length,
-      valorInventarioCompra: Math.round(valorInventarioCompra * 100) / 100,
-      valorInventarioVenta: Math.round(valorInventarioVenta * 100) / 100,
-      gananciaPotencialStock: Math.round((valorInventarioVenta - valorInventarioCompra) * 100) / 100,
+      valorInventarioCompra: Math.round(valorCompra * 100) / 100,
+      valorInventarioVenta: Math.round(valorVenta * 100) / 100,
+      gananciaPotencialStock: Math.round((valorVenta - valorCompra) * 100) / 100,
     };
   }
 }

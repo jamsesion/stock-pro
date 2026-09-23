@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { exportToCsv } from '../utils/csv';
 import { 
   Search, 
   Filter, 
@@ -74,50 +75,37 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   }, [products, search, selectedCategory, onlyLowStock, sortBy]);
 
   const exportCSV = () => {
-    const headers = [
-      'ID',
-      'Nombre',
-      'Categoria',
-      'Stock Actual',
-      'Stock Minimo',
-      'Unidad',
-      'Precio Compra',
-      'Precio Venta',
-      'Ganancia Unitaria',
-      'Margen %',
-      'Proveedor',
-      'Fecha Entrada',
-      'Ubicacion'
+  const headers = [
+    'ID', 'Nombre', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'Unidad',
+    'Precio Compra', 'Precio Venta', 'Ganancia Unitaria', 'Margen %',
+    'Proveedor', 'Fecha Entrada', 'Ubicación',
+  ];
+
+  const rows = filteredProducts.map((p) => {
+    const { ganancia, margenPorcentaje } = calculateProfit(p.precioVenta, p.precioCompra);
+    return [
+      p.id,
+      p.nombre,
+      p.categoria,
+      p.stockActual,
+      p.stockMinimo,
+      p.unidadMedida || 'ud',
+      p.precioCompra,
+      p.precioVenta,
+      ganancia,
+      margenPorcentaje,
+      p.proveedor,
+      p.fechaEntrada,
+      p.ubicacion || '',
     ];
+  });
 
-    const rows = filteredProducts.map((p) => {
-      const { ganancia, margenPorcentaje } = calculateProfit(p.precioVenta, p.precioCompra);
-      return [
-        p.id,
-        `"${p.nombre.replace(/"/g, '""')}"`,
-        `"${p.categoria}"`,
-        p.stockActual,
-        p.stockMinimo,
-        p.unidadMedida || 'ud',
-        p.precioCompra,
-        p.precioVenta,
-        ganancia,
-        margenPorcentaje,
-        `"${p.proveedor.replace(/"/g, '""')}"`,
-        p.fechaEntrada,
-        `"${p.ubicacion || ''}"`
-      ];
-    });
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `inventario_productos_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  exportToCsv(
+    `inventario_productos_${new Date().toISOString().split('T')[0]}.csv`,
+    headers,
+    rows
+  );
+};
 
   const lowStockTotal = products.filter((p) => p.stockActual <= p.stockMinimo).length;
 

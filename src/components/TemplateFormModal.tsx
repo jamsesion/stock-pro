@@ -6,10 +6,22 @@ import { formatCurrency } from '../utils/formatters';
 interface TemplateFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (template: Omit<InstallationTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
+  onSave: (
+    template: Omit<InstallationTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+  ) => void;
   initialTemplate?: InstallationTemplate | null;
   products: Product[];
+  allTemplates?: InstallationTemplate[];
 }
+
+const safeNumber = (v: unknown): number => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+};
 
 export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
   isOpen,
@@ -17,6 +29,7 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
   onSave,
   initialTemplate,
   products,
+  allTemplates = [],
 }) => {
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -27,7 +40,10 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
   const [selectedQuantity, setSelectedQuantity] = useState<number | ''>(1);
   const [error, setError] = useState('');
 
+  // Reset limpio al abrir
   useEffect(() => {
+    if (!isOpen) return;
+
     if (initialTemplate) {
       setNombre(initialTemplate.nombre);
       setDescripcion(initialTemplate.descripcion || '');
@@ -50,15 +66,14 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Calculate live financial summary for the template
   let costoMateriales = 0;
   let valorVentaEstimado = 0;
 
   items.forEach((item) => {
     const prod = products.find((p) => p.id === item.productoId);
     if (prod) {
-      costoMateriales += item.cantidad * (prod.precioCompra || 0);
-      valorVentaEstimado += item.cantidad * (prod.precioVenta || 0);
+      costoMateriales += safeNumber(item.cantidad) * safeNumber(prod.precioCompra);
+      valorVentaEstimado += safeNumber(item.cantidad) * safeNumber(prod.precioVenta);
     }
   });
 
@@ -74,7 +89,6 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
 
     const existingIndex = items.findIndex((i) => i.productoId === selectedProductId);
     if (existingIndex !== -1) {
-      // update quantity
       const updated = [...items];
       updated[existingIndex].cantidad += qty;
       setItems(updated);
@@ -82,7 +96,6 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
       setItems([...items, { productoId: selectedProductId, cantidad: qty }]);
     }
 
-    // Reset input
     setSelectedQuantity(1);
     setError('');
   };
@@ -100,12 +113,24 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
     if (!nombre.trim()) {
       setError('El nombre de la plantilla es obligatorio.');
       return;
     }
     if (items.length === 0) {
       setError('Debes añadir al menos un producto a la plantilla.');
+      return;
+    }
+
+    // Anti-duplicados
+    const nombreNorm = nombre.trim().toLowerCase();
+    const duplicada = allTemplates.find(
+      (t) => t.nombre.trim().toLowerCase() === nombreNorm && t.id !== initialTemplate?.id
+    );
+    if (duplicada) {
+      setError(`Ya existe una plantilla con ese nombre ("${duplicada.nombre}").`);
       return;
     }
 
@@ -126,7 +151,6 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
-        {/* Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-amber-500 text-slate-950 rounded-lg">
@@ -157,7 +181,6 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
             </div>
           )}
 
-          {/* Nombre & Categoría */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -189,7 +212,6 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
             </div>
           </div>
 
-          {/* Descripción & Tiempo */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -214,14 +236,15 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                 min="0.5"
                 step="0.5"
                 value={tiempoEstimadoHoras}
-                onChange={(e) => setTiempoEstimadoHoras(e.target.value === '' ? '' : Number(e.target.value))}
+                onChange={(e) =>
+                  setTiempoEstimadoHoras(e.target.value === '' ? '' : Number(e.target.value))
+                }
                 placeholder="Ej: 16"
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm"
               />
             </div>
           </div>
 
-          {/* Sección de Añadir Productos a la Plantilla */}
           <div className="border-t border-slate-200 pt-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-3 flex items-center justify-between">
               <span>Productos y Materiales Consumidos</span>
@@ -259,7 +282,9 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                   min="0.1"
                   step="any"
                   value={selectedQuantity}
-                  onChange={(e) => setSelectedQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) =>
+                    setSelectedQuantity(e.target.value === '' ? '' : Number(e.target.value))
+                  }
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white font-bold"
                 />
               </div>
@@ -275,12 +300,15 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
               </button>
             </div>
 
-            {/* Lista de productos añadidos a la plantilla */}
             {items.length === 0 ? (
               <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                 <Layers className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-600">No hay productos en esta plantilla todavía</p>
-                <p className="text-xs text-slate-400">Selecciona productos arriba y pulsa &quot;Añadir&quot;</p>
+                <p className="text-sm font-medium text-slate-600">
+                  No hay productos en esta plantilla todavía
+                </p>
+                <p className="text-xs text-slate-400">
+                  Selecciona productos arriba y pulsa &quot;Añadir&quot;
+                </p>
               </div>
             ) : (
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
@@ -289,7 +317,7 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                     <tr>
                       <th className="py-2.5 px-3">Producto</th>
                       <th className="py-2.5 px-3">Cantidad</th>
-                      <th className="py-2.5 px-3">Stock en Almacén</th>
+                      <th className="py-2.5 px-3">Stock</th>
                       <th className="py-2.5 px-3 text-right">Subtotal Compra</th>
                       <th className="py-2.5 px-3 text-right">Subtotal Venta</th>
                       <th className="py-2.5 px-2 text-center">Acción</th>
@@ -298,9 +326,10 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                   <tbody className="divide-y divide-slate-100">
                     {items.map((item, index) => {
                       const prod = products.find((p) => p.id === item.productoId);
-                      const subCompra = prod ? item.cantidad * prod.precioCompra : 0;
-                      const subVenta = prod ? item.cantidad * prod.precioVenta : 0;
-                      const hasEnoughStock = prod ? prod.stockActual >= item.cantidad : false;
+                      const cant = safeNumber(item.cantidad);
+                      const subCompra = prod ? cant * safeNumber(prod.precioCompra) : 0;
+                      const subVenta = prod ? cant * safeNumber(prod.precioVenta) : 0;
+                      const hasEnoughStock = prod ? prod.stockActual >= cant : false;
 
                       return (
                         <tr key={item.productoId} className="hover:bg-slate-50/80">
@@ -318,13 +347,19 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                                 onChange={(e) => handleUpdateItemQty(index, Number(e.target.value))}
                                 className="w-16 px-2 py-1 rounded border border-slate-300 text-xs font-bold text-center"
                               />
-                              <span className="text-xs text-slate-500">{prod?.unidadMedida || 'ud'}</span>
+                              <span className="text-xs text-slate-500">
+                                {prod?.unidadMedida || 'ud'}
+                              </span>
                             </div>
                           </td>
                           <td className="py-2.5 px-3">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              hasEnoughStock ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                            }`}>
+                            <span
+                              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                hasEnoughStock
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
                               {prod ? `${prod.stockActual} ${prod.unidadMedida || 'ud'}` : '0'}
                             </span>
                           </td>
@@ -339,7 +374,7 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
                               type="button"
                               onClick={() => handleRemoveItem(index)}
                               className="text-slate-400 hover:text-red-600 p-1 rounded transition"
-                              title="Eliminar producto de la plantilla"
+                              title="Eliminar producto"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -353,7 +388,6 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
             )}
           </div>
 
-          {/* Resumen Financiero Calculado de la Plantilla */}
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-xs text-amber-950 font-bold uppercase tracking-wider">
               <Calculator className="w-5 h-5 text-amber-600" />
@@ -363,20 +397,25 @@ export const TemplateFormModal: React.FC<TemplateFormModalProps> = ({
             <div className="flex items-center gap-6 text-right">
               <div>
                 <span className="text-xs text-slate-500 block">Coste Materiales:</span>
-                <span className="text-sm font-semibold text-slate-800">{formatCurrency(costoMateriales)}</span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {formatCurrency(costoMateriales)}
+                </span>
               </div>
               <div>
                 <span className="text-xs text-slate-500 block">PVP Materiales:</span>
-                <span className="text-sm font-semibold text-slate-800">{formatCurrency(valorVentaEstimado)}</span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {formatCurrency(valorVentaEstimado)}
+                </span>
               </div>
               <div>
                 <span className="text-xs text-slate-500 block">Ganancia Proyectada:</span>
-                <span className="text-base font-extrabold text-emerald-700">{formatCurrency(gananciaEstimada)}</span>
+                <span className="text-base font-extrabold text-emerald-700">
+                  {formatCurrency(gananciaEstimada)}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Footer Actions */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"

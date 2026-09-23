@@ -9,7 +9,7 @@ export interface Product {
   precioCompra: number;
   precioVenta: number;
   proveedor: string;
-  fechaEntrada: string; // YYYY-MM-DD
+  fechaEntrada: string;
   unidadMedida?: UnitOfMeasure | string;
   ubicacion?: string;
   notas?: string;
@@ -29,17 +29,31 @@ export interface InstallationTemplate {
   descripcion: string;
   categoria?: string;
   items: TemplateItem[];
-  precioVentaPersonalizado?: number | null; // Opcional, si no se calcula sumando el precioVenta de los productos
+  precioVentaPersonalizado?: number | null;
   tiempoEstimadoHoras?: number;
   createdAt: string;
   updatedAt: string;
 }
 
-export type MovementType = 
-  | 'SALIDA_INSTALACION' 
-  | 'ENTRADA_STOCK' 
-  | 'SALIDA_MANUAL' 
+export type MovementType =
+  | 'SALIDA_INSTALACION'
+  | 'ENTRADA_STOCK'
+  | 'SALIDA_MANUAL'
   | 'AJUSTE_INVENTARIO';
+
+/**
+ * Servicio extra añadido manualmente a una instalación.
+ * - precioVenta: lo que cobras al cliente (aparece en factura).
+ * - coste: lo que te cuesta a ti (no aparece en factura, solo para margen interno).
+ */
+export interface ExtraService {
+  id: string;
+  nombre: string;
+  cantidad: number;
+  precioVenta: number;
+  coste: number;
+  notas?: string;
+}
 
 export interface StockMovementItem {
   productoId: string;
@@ -55,26 +69,50 @@ export interface StockMovementItem {
 export interface StockMovement {
   id: string;
   tipo: MovementType;
-  fechaHora: string; // ISO 8601 string
-  motivo: string; // e.g. "Instalación cliente Pérez"
-  cliente?: string;
-  numeroFactura?: string; // Número correlativo de factura/albarán persistido en la BD
+  fechaHora: string;
+  motivo: string;
+  // Datos del cliente (3 campos separados para la factura)
+  cliente?: string;              // Nombre (compatibilidad y uso general)
+  clienteCI?: string;            // Cédula de Identidad
+  clienteDireccion?: string;     // Dirección
+  numeroFactura?: string;
+  formaPago?: string;            // Ej: "USD en efectivo"
   plantillaId?: string;
   plantillaNombre?: string;
   items: StockMovementItem[];
+  serviciosExtra?: ExtraService[];
+  descuento?: number;
   costoTotal: number;
   ingresoTotal: number;
-  gananciaTotal: number; // ingresoTotal - costoTotal
+  gananciaTotal: number;
   usuarioResponsable?: string;
   observaciones?: string;
 }
 
-export type DateRangePreset = 'all' | 'today' | 'last7days' | 'thisMonth' | 'lastMonth' | 'custom';
+/**
+ * Datos de la empresa que aparecen en la cabecera de la factura.
+ * Se guardan en el .json y son editables.
+ */
+export interface CompanyInfo {
+  nombre: string;
+  cif?: string;
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+}
+
+export type DateRangePreset =
+  | 'all'
+  | 'today'
+  | 'last7days'
+  | 'thisMonth'
+  | 'lastMonth'
+  | 'custom';
 
 export interface DateRangeFilter {
   preset: DateRangePreset;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string;   // YYYY-MM-DD
+  startDate?: string;
+  endDate?: string;
 }
 
 export type ActiveTab = 'products' | 'templates' | 'movements' | 'profit' | 'alerts';
